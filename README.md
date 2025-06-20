@@ -1,5 +1,3 @@
-# cignal
-
 # 🎯 Cignal
 
 A modern RSS monitoring and content analysis platform built with Next.js 14, Supabase, and TypeScript. Cignal helps you track, analyze, and manage RSS feeds with AI-powered content extraction and real-time updates.
