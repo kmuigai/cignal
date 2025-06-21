@@ -125,28 +125,229 @@ export function PressReleaseDetail({ release, company, isBookmarked, onToggleBoo
     // Clean HTML tags first
     const cleanText = cleanHtmlTags(text)
 
-    // Split by double line breaks to create paragraphs
-    const paragraphs = cleanText.split(/\n\s*\n/)
+    // Enhanced paragraph processing
+    const processedContent = processTextStructure(cleanText)
 
-    return paragraphs
+    return processedContent
       .map((paragraph, index) => {
         if (!paragraph.trim()) return null
 
-        // Split by single line breaks within paragraphs
-        const lines = paragraph.split("\n")
+        // Handle different types of content
+        if (isListItem(paragraph)) {
+          return (
+            <div key={index} className="mb-2">
+              {formatListItem(paragraph)}
+            </div>
+          )
+        }
 
+        if (isQuoteText(paragraph)) {
+          return (
+            <blockquote key={index} className="border-l-4 border-muted pl-4 mb-4 italic text-muted-foreground">
+              {formatParagraphLines(paragraph)}
+            </blockquote>
+          )
+        }
+
+        if (isHeadingText(paragraph)) {
+          return (
+            <h3 key={index} className="font-semibold text-lg mb-3 mt-6 first:mt-0">
+              {formatParagraphLines(paragraph)}
+            </h3>
+          )
+        }
+
+        // Regular paragraph
         return (
           <p key={index} className="mb-4 last:mb-0">
-            {lines.map((line, lineIndex) => (
-              <span key={lineIndex}>
-                {line.trim()}
-                {lineIndex < lines.length - 1 && <br />}
-              </span>
-            ))}
+            {formatParagraphLines(paragraph)}
           </p>
         )
       })
       .filter(Boolean)
+  }
+
+  /**
+   * Process text structure to create well-formed paragraphs
+   */
+  const processTextStructure = (text: string): string[] => {
+    // Split by double line breaks first
+    let paragraphs = text.split(/\n\s*\n/)
+
+    // Process each paragraph
+    paragraphs = paragraphs.map(paragraph => paragraph.trim()).filter(p => p.length > 0)
+
+    // Merge very short paragraphs with subsequent ones (unless they're special elements)
+    const processedParagraphs = []
+    for (let i = 0; i < paragraphs.length; i++) {
+      const current = paragraphs[i]
+      const next = paragraphs[i + 1]
+
+      // If current paragraph is very short and not a special element
+      if (current.length < 60 && next && !isSpecialElement(current) && !isSpecialElement(next)) {
+        // Check if they should be merged based on content
+        if (shouldMergeParagraphs(current, next)) {
+          processedParagraphs.push(current + " " + next)
+          i++ // Skip next paragraph
+          continue
+        }
+      }
+
+      // Split very long paragraphs at natural boundaries
+      if (current.length > 800) {
+        const splitParas = splitLongParagraphByContent(current)
+        processedParagraphs.push(...splitParas)
+      } else {
+        processedParagraphs.push(current)
+      }
+    }
+
+    return processedParagraphs
+  }
+
+  /**
+   * Check if two paragraphs should be merged
+   */
+  const shouldMergeParagraphs = (current: string, next: string): boolean => {
+    // Don't merge if either starts with typical paragraph indicators
+    const paragraphStarters = /^(However|Therefore|Moreover|Furthermore|Additionally|In addition|For example|For instance|Meanwhile|Subsequently)/i
+    if (paragraphStarters.test(next)) return false
+
+    // Don't merge if current ends with typical paragraph enders
+    if (current.endsWith(':') || current.endsWith('--')) return false
+
+    // Don't merge if next starts with a quote or date
+    if (next.startsWith('"') || /^\w+,\s+\w+\s+\d+/.test(next)) return false
+
+    return true
+  }
+
+  /**
+   * Split long paragraphs at natural sentence boundaries
+   */
+  const splitLongParagraphByContent = (paragraph: string): string[] => {
+    // Split into sentences
+    const sentences = paragraph.split(/(?<=[.!?])\s+(?=[A-Z])/)
+    if (sentences.length < 3) return [paragraph]
+
+    const chunks = []
+    let currentChunk = ""
+
+    for (const sentence of sentences) {
+      if (currentChunk.length + sentence.length > 400 && currentChunk.length > 100) {
+        chunks.push(currentChunk.trim())
+        currentChunk = sentence
+      } else {
+        currentChunk += (currentChunk ? " " : "") + sentence
+      }
+    }
+
+    if (currentChunk.trim()) {
+      chunks.push(currentChunk.trim())
+    }
+
+    return chunks.length > 1 ? chunks : [paragraph]
+  }
+
+  /**
+   * Check if text is a special element that shouldn't be merged
+   */
+  const isSpecialElement = (text: string): boolean => {
+    return isListItem(text) || isQuoteText(text) || isHeadingText(text) || isDateLine(text)
+  }
+
+  /**
+   * Check if text is a list item
+   */
+  const isListItem = (text: string): boolean => {
+    const trimmed = text.trim()
+    return trimmed.startsWith("•") || 
+           trimmed.startsWith("*") || 
+           /^\d+\./.test(trimmed) ||
+           /^[a-zA-Z]\./.test(trimmed)
+  }
+
+  /**
+   * Check if text is quoted content
+   */
+  const isQuoteText = (text: string): boolean => {
+    const trimmed = text.trim()
+    return (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+           (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+           trimmed.startsWith("> ")
+  }
+
+  /**
+   * Check if text is a heading
+   */
+  const isHeadingText = (text: string): boolean => {
+    const trimmed = text.trim()
+    
+    // Short text that ends with colon (likely a section header)
+    if (trimmed.length < 100 && trimmed.endsWith(":")) return true
+    
+    // All caps text (likely emphasis/header)
+    if (trimmed === trimmed.toUpperCase() && trimmed.length < 150 && trimmed.length > 5) return true
+    
+    // Text with markdown-style emphasis
+    if (trimmed.startsWith("**") && trimmed.endsWith("**")) return true
+    
+    return false
+  }
+
+  /**
+   * Check if text is a dateline
+   */
+  const isDateLine = (text: string): boolean => {
+    const trimmed = text.trim()
+    // Look for city/date patterns like "NEW YORK, March 15, 2024"
+    return /^[A-Z]{2,}[^,]*,\s*\w+\s+\d+,\s*\d{4}/.test(trimmed)
+  }
+
+  /**
+   * Format individual paragraph lines with proper line breaks
+   */
+  const formatParagraphLines = (paragraph: string) => {
+    // Split by single line breaks within paragraphs
+    const lines = paragraph.split("\n")
+
+    return lines.map((line, lineIndex) => (
+      <span key={lineIndex}>
+        {line.trim()}
+        {lineIndex < lines.length - 1 && <br />}
+      </span>
+    ))
+  }
+
+  /**
+   * Format list items with proper styling
+   */
+  const formatListItem = (item: string) => {
+    const trimmed = item.trim()
+    
+    if (trimmed.startsWith("•") || trimmed.startsWith("*")) {
+      return (
+        <div className="flex items-start gap-2">
+          <span className="text-muted-foreground mt-1">•</span>
+          <span>{trimmed.substring(1).trim()}</span>
+        </div>
+      )
+    }
+    
+    if (/^\d+\./.test(trimmed)) {
+      const match = trimmed.match(/^(\d+)\.\s*(.*)/)
+      if (match) {
+        return (
+          <div className="flex items-start gap-2">
+            <span className="text-muted-foreground font-medium">{match[1]}.</span>
+            <span>{match[2]}</span>
+          </div>
+        )
+      }
+    }
+    
+    // Fallback for other list formats
+    return <span>{trimmed}</span>
   }
 
   return (

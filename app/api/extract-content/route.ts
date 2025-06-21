@@ -366,34 +366,176 @@ function cleanHtmlContent(html: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&apos;/g, "'")
+    .replace(/&mdash;/g, "—")
+    .replace(/&ndash;/g, "–")
+    .replace(/&hellip;/g, "...")
 
     // Enhanced paragraph handling - preserve structure better
+    // Handle paragraph tags with better spacing preservation
     .replace(/<\/p>\s*<p[^>]*>/gi, "\n\n")
     .replace(/<p[^>]*>/gi, "")
     .replace(/<\/p>/gi, "\n\n")
 
-    // Convert line breaks
-    .replace(/<br[^>]*>/gi, "\n")
+    // Handle headings with proper spacing
+    .replace(/<\/h[1-6]>\s*<h[1-6][^>]*>/gi, "\n\n")
+    .replace(/<h[1-6][^>]*>/gi, "\n\n")
+    .replace(/<\/h[1-6]>/gi, "\n\n")
 
-    // Handle div tags more intelligently
-    .replace(/<\/div>\s*<div[^>]*>/gi, "\n")
+    // Handle blockquotes with proper spacing
+    .replace(/<\/blockquote>\s*<blockquote[^>]*>/gi, "\n\n")
+    .replace(/<blockquote[^>]*>/gi, "\n\n")
+    .replace(/<\/blockquote>/gi, "\n\n")
+
+    // Convert line breaks intelligently
+    .replace(/<br[^>]*>\s*<br[^>]*>/gi, "\n\n") // Double breaks = paragraph
+    .replace(/<br[^>]*>/gi, "\n") // Single breaks = line break
+
+    // Handle div tags more intelligently - preserve paragraph structure
+    .replace(/<\/div>\s*<div[^>]*>/gi, "\n\n")
     .replace(/<div[^>]*>/gi, "")
     .replace(/<\/div>/gi, "\n")
 
-    // Handle lists
+    // Enhanced list handling with better structure preservation
+    .replace(/<\/ul>\s*<ul[^>]*>/gi, "\n") // Connect adjacent lists
+    .replace(/<\/ol>\s*<ol[^>]*>/gi, "\n")
+    .replace(/<ul[^>]*>/gi, "\n")
+    .replace(/<\/ul>/gi, "\n\n")
+    .replace(/<ol[^>]*>/gi, "\n")
+    .replace(/<\/ol>/gi, "\n\n")
     .replace(/<\/li>\s*<li[^>]*>/gi, "\n")
-    .replace(/<[\/]?[uo]l[^>]*>/gi, "\n")
     .replace(/<li[^>]*>/gi, "• ")
     .replace(/<\/li>/gi, "\n")
+
+    // Handle table structures
+    .replace(/<\/tr>\s*<tr[^>]*>/gi, "\n")
+    .replace(/<\/td>\s*<td[^>]*>/gi, " | ")
+    .replace(/<\/th>\s*<th[^>]*>/gi, " | ")
+    .replace(/<t[hd][^>]*>/gi, "")
+    .replace(/<\/t[hd]>/gi, "")
+    .replace(/<table[^>]*>/gi, "\n")
+    .replace(/<\/table>/gi, "\n\n")
+    .replace(/<tr[^>]*>/gi, "")
+    .replace(/<\/tr>/gi, "\n")
+
+    // Handle emphasis and formatting tags
+    .replace(/<strong[^>]*>/gi, "**")
+    .replace(/<\/strong>/gi, "**")
+    .replace(/<b[^>]*>/gi, "**")
+    .replace(/<\/b>/gi, "**")
+    .replace(/<em[^>]*>/gi, "*")
+    .replace(/<\/em>/gi, "*")
+    .replace(/<i[^>]*>/gi, "*")
+    .replace(/<\/i>/gi, "*")
 
     // Remove all other HTML tags
     .replace(/<[^>]*>/g, "")
 
-    // Enhanced whitespace cleanup
-    .replace(/\n\s*\n\s*\n/g, "\n\n") // Multiple line breaks to double
+    // Enhanced whitespace cleanup and paragraph detection
+    .replace(/\n\s*\n\s*\n+/g, "\n\n") // Multiple line breaks to double
     .replace(/[ \t]+/g, " ") // Multiple spaces to single
     .replace(/^\s+|\s+$/gm, "") // Trim lines
     .trim()
 
-  return cleaned
+  // Post-processing: Improve paragraph detection
+  return improveTextStructure(cleaned)
+}
+
+/**
+ * Improve text structure by detecting natural paragraph boundaries
+ */
+function improveTextStructure(text: string): string {
+  if (!text) return ""
+
+  // Split into potential paragraphs
+  let paragraphs = text.split(/\n\n+/)
+  
+  // Process each paragraph
+  paragraphs = paragraphs.map(paragraph => {
+    if (!paragraph.trim()) return ""
+    
+    // Clean up the paragraph
+    paragraph = paragraph.trim()
+    
+    // If paragraph is very long (>1000 chars), try to split it intelligently
+    if (paragraph.length > 1000) {
+      return splitLongParagraph(paragraph)
+    }
+    
+    return paragraph
+  }).filter(p => p.length > 0)
+
+  // Merge very short paragraphs with the next one (unless they look like headers)
+  const mergedParagraphs = []
+  for (let i = 0; i < paragraphs.length; i++) {
+    const current = paragraphs[i]
+    const next = paragraphs[i + 1]
+    
+    // If current paragraph is very short and doesn't look like a standalone element
+    if (current.length < 50 && next && !isStandaloneElement(current)) {
+      // Merge with next paragraph
+      mergedParagraphs.push(current + " " + next)
+      i++ // Skip the next paragraph since we merged it
+    } else {
+      mergedParagraphs.push(current)
+    }
+  }
+
+  return mergedParagraphs.join("\n\n")
+}
+
+/**
+ * Split long paragraphs at natural boundaries
+ */
+function splitLongParagraph(paragraph: string): string {
+  // Look for natural break points
+  const sentences = paragraph.split(/(?<=[.!?])\s+(?=[A-Z])/)
+  
+  if (sentences.length < 2) return paragraph
+  
+  const chunks = []
+  let currentChunk = ""
+  
+  for (const sentence of sentences) {
+    if (currentChunk.length + sentence.length > 500 && currentChunk.length > 0) {
+      chunks.push(currentChunk.trim())
+      currentChunk = sentence
+    } else {
+      currentChunk += (currentChunk ? " " : "") + sentence
+    }
+  }
+  
+  if (currentChunk.trim()) {
+    chunks.push(currentChunk.trim())
+  }
+  
+  return chunks.join("\n\n")
+}
+
+/**
+ * Check if a text element should stand alone (like headers, quotes, lists)
+ */
+function isStandaloneElement(text: string): boolean {
+  const trimmed = text.trim()
+  
+  // Check for list items
+  if (trimmed.startsWith("•") || /^\d+\./.test(trimmed)) {
+    return true
+  }
+  
+  // Check for quoted text
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return true
+  }
+  
+  // Check for emphasis (all caps, bold markers)
+  if (trimmed === trimmed.toUpperCase() && trimmed.length < 100) {
+    return true
+  }
+  
+  // Check for potential headers (short, ends with colon)
+  if (trimmed.length < 80 && trimmed.endsWith(":")) {
+    return true
+  }
+  
+  return false
 }
