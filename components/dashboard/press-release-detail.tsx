@@ -222,7 +222,7 @@ export function PressReleaseDetail({ release, company, isBookmarked, onToggleBoo
           <h1 className="text-xl font-semibold leading-tight">{release.title}</h1>
           
           {/* AI Analysis Section - Moved to top with desktop collapse functionality */}
-          <div className="border-t pt-3">
+          <div className={`${!isCollapsed ? 'border-t pt-3' : 'pt-3'}`}>
             <AIAnalysisSection
               analysis={analysis}
               loading={aiLoading}
