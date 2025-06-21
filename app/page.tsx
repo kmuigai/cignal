@@ -16,8 +16,10 @@ function LoadingSpinner() {
 // Server-side root page
 export default function RootPage() {
   return (
-    <Suspense fallback={<LoadingSpinner />}>
-      <AuthHandler />
-    </Suspense>
+    <div className="min-h-screen">
+      <Suspense fallback={<LoadingSpinner />}>
+        <AuthHandler />
+      </Suspense>
+    </div>
   )
 }
