@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge"
 import { Bookmark, BookmarkPlus, ExternalLink, Loader2, ArrowLeft } from "lucide-react"
 import { useContentExtraction, getBestContent } from "@/hooks/use-content-extraction"
 import { useAIAnalysis } from "@/hooks/use-ai-analysis"
-import { useSummaryCollapse } from "@/hooks/use-summary-collapse"
 import { AIAnalysisSection } from "./ai-analysis-section"
 
 interface PressReleaseDetailProps {
@@ -21,9 +20,6 @@ interface PressReleaseDetailProps {
 export function PressReleaseDetail({ release, company, isBookmarked, onToggleBookmark, onBackToFeed, showBackButton }: PressReleaseDetailProps) {
   // Extract full content from the source URL
   const { data: extractionResult, loading: extractionLoading } = useContentExtraction(release.sourceUrl)
-
-  // Summary collapse state management
-  const { isCollapsed, toggle: toggleCollapse, isLoaded: collapseStateLoaded } = useSummaryCollapse()
 
   // Get the best available content (HTML or text)
   const contentInfo = getBestContent(extractionResult)
@@ -221,29 +217,15 @@ export function PressReleaseDetail({ release, company, isBookmarked, onToggleBoo
           
           <h1 className="text-xl font-semibold leading-tight">{release.title}</h1>
           
-          {/* Summary section with collapse functionality */}
-          <div className="border-t pt-3">
-            <button
-              onClick={toggleCollapse}
-              className="flex items-center justify-between w-full text-left"
-              disabled={!collapseStateLoaded}
-            >
-              <span className="text-sm font-medium text-muted-foreground">
-                {extractionLoading ? "Loading full article..." : "Summary"}
-              </span>
-              {collapseStateLoaded && (
-                <span className="text-xs text-muted-foreground">
-                  {isCollapsed ? "Show" : "Hide"}
-                </span>
-              )}
-            </button>
-            
-            {!isCollapsed && collapseStateLoaded && (
-              <div className="mt-2 text-sm text-muted-foreground leading-relaxed">
-                {release.summary}
-              </div>
-            )}
-          </div>
+          {/* AI Analysis Section - Moved to top */}
+          <AIAnalysisSection
+            analysis={analysis}
+            loading={aiLoading}
+            error={aiError}
+            onRetry={retryAnalysis}
+            fromCache={fromCache}
+            cacheAge={cacheAge}
+          />
         </div>
       </div>
 
@@ -254,16 +236,6 @@ export function PressReleaseDetail({ release, company, isBookmarked, onToggleBoo
           <div className="space-y-4">
             {renderContent()}
           </div>
-
-          {/* AI Analysis Section */}
-          <AIAnalysisSection
-            analysis={analysis}
-            loading={aiLoading}
-            error={aiError}
-            onRetry={retryAnalysis}
-            fromCache={fromCache}
-            cacheAge={cacheAge}
-          />
         </div>
       </div>
     </div>
