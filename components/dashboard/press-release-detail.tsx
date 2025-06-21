@@ -309,11 +309,11 @@ export function PressReleaseDetail({ release, company, isBookmarked, onToggleBoo
           {collapseStateLoaded && (
             <div 
               className={`
-                shrink-0 border-b border-border bg-background transition-all duration-300 ease-in-out overflow-hidden
-                ${isCollapsed ? 'h-auto' : 'h-[30vh]'}
+                shrink-0 border-b border-border bg-background transition-all duration-300 ease-in-out
+                ${isCollapsed ? 'h-auto overflow-hidden' : 'max-h-[45vh] overflow-y-auto'}
               `}
             >
-              <div className={`h-full ${isCollapsed ? 'p-0' : 'p-4 overflow-y-auto'}`}>
+              <div className={`${isCollapsed ? 'p-0' : 'p-4'}`}>
                 <AIAnalysisSection
                   analysis={analysis}
                   loading={aiLoading}
