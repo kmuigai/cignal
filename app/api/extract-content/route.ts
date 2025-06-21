@@ -87,6 +87,13 @@ export async function GET(request: Request) {
 
 function extractPRNewswireContent(html: string): string {
   try {
+    // ⭐ NEW: Try precise PR Newswire boundary extraction first
+    const preciseContent = extractPRNewswireArticleContent(html)
+    if (preciseContent && preciseContent.length > 100) {
+      console.log(`📝 Content extracted using precise PR Newswire boundaries`)
+      return preciseContent
+    }
+
     // Enhanced PR Newswire content selectors (in order of preference)
     const contentSelectors = [
       // Most specific PR Newswire selectors
@@ -238,4 +245,46 @@ function validateContentQuality(content: string): boolean {
   }
 
   return true
+}
+
+/**
+ * Extract PR Newswire article content using precise HTML structural boundaries
+ * START: <section class="release-body container "><div class="row"><div class="col-lg-10 col-lg-offset-1">
+ * END: <div class="row"><div class="col-sm-10 col-sm-offset-1">
+ */
+function extractPRNewswireArticleContent(html: string): string | null {
+  try {
+    // Find the article start boundary
+    const startPattern = /<section[^>]*class="[^"]*release-body[^"]*container[^"]*"[^>]*>\s*<div[^>]*class="[^"]*row[^"]*"[^>]*>\s*<div[^>]*class="[^"]*col-lg-10[^"]*col-lg-offset-1[^"]*"[^>]*>/i
+    const startMatch = html.match(startPattern)
+    
+    if (!startMatch) {
+      return null // No PR Newswire structure found
+    }
+    
+    const startIndex = startMatch.index! + startMatch[0].length
+    
+    // Find the article end boundary (after the start position)
+    const endPattern = /<div[^>]*class="[^"]*row[^"]*"[^>]*>\s*<div[^>]*class="[^"]*col-sm-10[^"]*col-sm-offset-1[^"]*"[^>]*>/i
+    const htmlAfterStart = html.substring(startIndex)
+    const endMatch = htmlAfterStart.match(endPattern)
+    
+    if (!endMatch) {
+      // If no end boundary found, extract until end of section
+      const sectionEndPattern = /<\/section>/i
+      const sectionEndMatch = htmlAfterStart.match(sectionEndPattern)
+      const endIndex = sectionEndMatch ? sectionEndMatch.index! : htmlAfterStart.length
+      const content = htmlAfterStart.substring(0, endIndex).trim()
+      return validateContentQuality(content) ? content : null
+    }
+    
+    // Extract content between start and end boundaries
+    const endIndex = endMatch.index!
+    const content = htmlAfterStart.substring(0, endIndex).trim()
+    
+    return validateContentQuality(content) ? content : null
+  } catch (error) {
+    console.error('Error in precise PR Newswire extraction:', error)
+    return null
+  }
 }
