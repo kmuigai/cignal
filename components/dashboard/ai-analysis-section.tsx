@@ -76,7 +76,7 @@ export function AIAnalysisSection({
 
   if (isCollapsed && showCollapseControls) {
     return (
-      <div className="hidden lg:block bg-muted/30 rounded-lg p-3 mb-4 border-l-2 border-primary/20">
+      <div className="hidden lg:block bg-muted/30 rounded-lg p-3 mb-4 border-l-2 border-primary/20 transition-all duration-300 ease-in-out">
         {renderHeader()}
         <p className="text-xs text-muted-foreground mt-1 truncate">
           {loading ? "Analyzing..." : error ? "Analysis failed" : analysis?.summary || "Click to expand AI summary"}
@@ -153,10 +153,10 @@ export function AIAnalysisSection({
   }
 
   return (
-    <div className="bg-muted/50 rounded-lg p-4 mb-4">
+    <div className="bg-muted/50 rounded-lg p-4 mb-4 transition-all duration-300 ease-in-out">
       {renderHeader()}
 
-      <div className="space-y-3 mt-3">
+      <div className="space-y-3 mt-3 transform transition-all duration-300 ease-in-out">
         <p className="text-sm text-foreground leading-relaxed">{analysis.summary}</p>
 
         {analysis.keyPoints && analysis.keyPoints.length > 0 && (

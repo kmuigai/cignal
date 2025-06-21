@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Bookmark, BookmarkPlus, ExternalLink, Loader2, ArrowLeft } from "lucide-react"
 import { useContentExtraction, getBestContent } from "@/hooks/use-content-extraction"
 import { useAIAnalysis } from "@/hooks/use-ai-analysis"
+import { useAISummaryCollapse } from "@/hooks/use-ai-summary-collapse"
 import { AIAnalysisSection } from "./ai-analysis-section"
 
 interface PressReleaseDetailProps {
@@ -20,6 +21,9 @@ interface PressReleaseDetailProps {
 export function PressReleaseDetail({ release, company, isBookmarked, onToggleBookmark, onBackToFeed, showBackButton }: PressReleaseDetailProps) {
   // Extract full content from the source URL
   const { data: extractionResult, loading: extractionLoading } = useContentExtraction(release.sourceUrl)
+
+  // AI Summary collapse state management (desktop-only)
+  const { isCollapsed, toggle: toggleAICollapse, isLoaded: aiCollapseLoaded } = useAISummaryCollapse()
 
   // Get the best available content (HTML or text)
   const contentInfo = getBestContent(extractionResult)
@@ -217,15 +221,20 @@ export function PressReleaseDetail({ release, company, isBookmarked, onToggleBoo
           
           <h1 className="text-xl font-semibold leading-tight">{release.title}</h1>
           
-          {/* AI Analysis Section - Moved to top */}
-          <AIAnalysisSection
-            analysis={analysis}
-            loading={aiLoading}
-            error={aiError}
-            onRetry={retryAnalysis}
-            fromCache={fromCache}
-            cacheAge={cacheAge}
-          />
+          {/* AI Analysis Section - Moved to top with desktop collapse functionality */}
+          <div className="border-t pt-3">
+            <AIAnalysisSection
+              analysis={analysis}
+              loading={aiLoading}
+              error={aiError}
+              onRetry={retryAnalysis}
+              fromCache={fromCache}
+              cacheAge={cacheAge}
+              isCollapsed={isCollapsed}
+              onToggleCollapse={toggleAICollapse}
+              showCollapseControls={aiCollapseLoaded}
+            />
+          </div>
         </div>
       </div>
 
