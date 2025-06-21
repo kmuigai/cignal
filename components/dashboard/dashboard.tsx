@@ -26,6 +26,8 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
   const [bookmarkedReleases, setBookmarkedReleases] = useState<Set<string>>(new Set())
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [hasAPIKey, setHasAPIKey] = useState(false)
+  // Mobile state management
+  const [mobileView, setMobileView] = useState<'feed' | 'detail'>('feed')
 
   // Use the companies hook with proper error handling
   const { companies, loading: companiesLoading, error: companiesError } = useCompanies()
@@ -88,6 +90,8 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
 
   const handleReleaseSelect = (release: PressRelease) => {
     setSelectedRelease(release)
+    // Switch to detail view on mobile when a release is selected
+    setMobileView('detail')
 
     // Mark as read
     if (!readReleases.has(release.id)) {
@@ -106,6 +110,11 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
     // Clear API key on sign out for security
     claudeAPIKeyManager.clearAPIKey()
     onSignOut()
+  }
+
+  // Mobile back to feed handler
+  const handleBackToFeed = () => {
+    setMobileView('feed')
   }
 
   // Show loading state while companies are loading
@@ -166,9 +175,14 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
 
       {!hasAPIKey && <APIKeyWarningBanner onOpenSettings={() => setSettingsOpen(true)} />}
 
-      <div className={`flex ${!hasAPIKey ? "h-[calc(100vh-8rem)]" : "h-[calc(100vh-4rem)]"}`}>
+      {/* Responsive Layout Container */}
+      <div className={`flex flex-col lg:flex-row ${!hasAPIKey ? "h-[calc(100vh-8rem)]" : "h-[calc(100vh-4rem)]"}`}>
         {/* Left Panel - Activity Feed */}
-        <div className="w-2/5 border-r border-border flex flex-col">
+        <div className={`
+          w-full lg:w-2/5 
+          ${mobileView === 'feed' ? 'flex' : 'hidden'} lg:flex 
+          border-r-0 lg:border-r border-border flex-col
+        `}>
           <ActivityFeed
             releases={filteredReleases}
             companies={companies} // Now guaranteed to be an array
@@ -184,13 +198,19 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
         </div>
 
         {/* Right Panel - Press Release Detail */}
-        <div className="w-3/5 flex flex-col">
+        <div className={`
+          w-full lg:w-3/5 
+          ${mobileView === 'detail' ? 'flex' : 'hidden'} lg:flex 
+          flex-col
+        `}>
           {selectedRelease ? (
             <PressReleaseDetail
               release={selectedRelease}
               company={Array.isArray(companies) ? companies.find((c) => c.id === selectedRelease.companyId) : undefined}
               isBookmarked={bookmarkedReleases.has(selectedRelease.id)}
               onToggleBookmark={() => toggleBookmark(selectedRelease.id)}
+              onBackToFeed={handleBackToFeed}
+              showBackButton={true}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center text-muted-foreground">

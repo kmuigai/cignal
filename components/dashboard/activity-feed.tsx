@@ -81,30 +81,35 @@ export function ActivityFeed({
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Filter Tabs */}
-      <div className="p-4 border-b border-border">
-        <div className="flex flex-wrap gap-2 mb-3">
-          {companyOptions.map((company) => (
-            <Button
-              key={company}
-              variant={selectedCompany === company ? "default" : "outline"}
-              size="sm"
-              onClick={() => onCompanyChange(company)}
-              className="text-xs"
-            >
-              {company}
-            </Button>
-          ))}
+      <div className="p-3 sm:p-4 border-b border-border">
+        {/* Company Filter Buttons - Horizontal scroll on mobile */}
+        <div className="mb-3">
+          <ScrollArea className="w-full">
+            <div className="flex gap-2 pb-2 min-w-max">
+              {companyOptions.map((company) => (
+                <Button
+                  key={company}
+                  variant={selectedCompany === company ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => onCompanyChange(company)}
+                  className="text-xs shrink-0"
+                >
+                  {company}
+                </Button>
+              ))}
+            </div>
+          </ScrollArea>
         </div>
 
         {/* Last Updated and Refresh */}
         <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>Last updated: {formatLastUpdated(lastUpdated)}</span>
+          <span className="truncate">Last updated: {formatLastUpdated(lastUpdated)}</span>
           <Button
             variant="ghost"
             size="sm"
             onClick={onRefresh}
             disabled={refreshing}
-            className="h-6 w-6 p-0"
+            className="h-6 w-6 p-0 shrink-0 ml-2"
             title="Refresh data"
           >
             <RefreshCw className={cn("h-3 w-3", refreshing && "animate-spin")} />
@@ -114,7 +119,7 @@ export function ActivityFeed({
 
       {/* Press Release List */}
       <ScrollArea className="flex-1">
-        <div className="p-4 space-y-3">
+        <div className="p-3 sm:p-4 space-y-3">
           {safeReleases.map((release) => {
             const company = safeCompanies.find((c) => c.id === release.companyId)
             const isSelected = selectedReleaseId === release.id
@@ -124,24 +129,30 @@ export function ActivityFeed({
               <div
                 key={release.id}
                 className={cn(
-                  "p-4 rounded-lg border cursor-pointer transition-colors hover:bg-accent/50",
+                  "p-3 sm:p-4 rounded-lg border cursor-pointer transition-colors hover:bg-accent/50 active:bg-accent/70",
                   isSelected && "bg-accent border-accent-foreground/20",
                 )}
                 onClick={() => onReleaseSelect(release)}
               >
                 <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="text-xs">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <Badge variant="secondary" className="text-xs shrink-0">
                       {company?.name || "Unknown Company"}
                     </Badge>
-                    {isUnread && <div className="w-2 h-2 bg-primary rounded-full"></div>}
+                    {isUnread && <div className="w-2 h-2 bg-primary rounded-full shrink-0"></div>}
                   </div>
-                  <span className="text-xs text-muted-foreground">{formatRelativeTime(release.publishedAt)}</span>
+                  <span className="text-xs text-muted-foreground shrink-0 ml-2">
+                    {formatRelativeTime(release.publishedAt)}
+                  </span>
                 </div>
 
-                <h3 className="font-medium text-sm mb-2 line-clamp-2">{release.title}</h3>
+                <h3 className="font-medium text-sm mb-2 line-clamp-2 leading-relaxed">
+                  {release.title}
+                </h3>
 
-                <p className="text-xs text-muted-foreground line-clamp-2">{cleanHtmlTags(release.summary)}</p>
+                <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                  {cleanHtmlTags(release.summary)}
+                </p>
               </div>
             )
           })}

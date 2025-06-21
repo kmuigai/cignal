@@ -3,7 +3,7 @@
 import type { PressRelease, Company } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Bookmark, BookmarkPlus, ExternalLink, Loader2 } from "lucide-react"
+import { Bookmark, BookmarkPlus, ExternalLink, Loader2, ArrowLeft } from "lucide-react"
 import { useContentExtraction } from "@/hooks/use-content-extraction"
 import { useAIAnalysis } from "@/hooks/use-ai-analysis"
 import { AIAnalysisSection } from "./ai-analysis-section"
@@ -13,9 +13,11 @@ interface PressReleaseDetailProps {
   company?: Company
   isBookmarked: boolean
   onToggleBookmark: () => void
+  onBackToFeed?: () => void
+  showBackButton?: boolean
 }
 
-export function PressReleaseDetail({ release, company, isBookmarked, onToggleBookmark }: PressReleaseDetailProps) {
+export function PressReleaseDetail({ release, company, isBookmarked, onToggleBookmark, onBackToFeed, showBackButton }: PressReleaseDetailProps) {
   // Extract full content from the source URL
   const { data: extractionResult, loading: extractionLoading } = useContentExtraction(release.sourceUrl)
 
@@ -147,6 +149,21 @@ export function PressReleaseDetail({ release, company, isBookmarked, onToggleBoo
     <div className="flex flex-col h-full bg-background">
       {/* Header - Fixed */}
       <div className="shrink-0 p-6 border-b border-border bg-background">
+        {/* Mobile Back Button */}
+        {showBackButton && onBackToFeed && (
+          <div className="mb-4 lg:hidden">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onBackToFeed}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Feed
+            </Button>
+          </div>
+        )}
+        
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
             <Badge variant="secondary">{company?.name}</Badge>

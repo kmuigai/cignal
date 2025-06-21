@@ -21,20 +21,28 @@ export function Header({ user, onSignOut, onOpenSettings, bookmarkCount = 0 }: H
   const initials = getUserInitials(user)
 
   return (
-    <header className="h-16 border-b border-border flex items-center justify-between px-6 bg-background">
-      <div className="flex items-center space-x-4">
-        <h1 className="text-2xl font-bricolage font-semibold tracking-tight">CIGNAL</h1>
+    <header className="h-16 border-b border-border flex items-center justify-between px-4 sm:px-6 bg-background">
+      <div className="flex items-center space-x-2 sm:space-x-4">
+        <h1 className="text-xl sm:text-2xl font-bricolage font-semibold tracking-tight">CIGNAL</h1>
         {bookmarkCount > 0 && (
-          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+          <div className="hidden sm:flex items-center gap-1 text-sm text-muted-foreground">
             <Bookmark className="h-4 w-4" />
             <Badge variant="secondary" className="text-xs">
               {bookmarkCount} bookmarked
             </Badge>
           </div>
         )}
+        {/* Mobile bookmark indicator - just show count */}
+        {bookmarkCount > 0 && (
+          <div className="sm:hidden">
+            <Badge variant="secondary" className="text-xs">
+              {bookmarkCount}
+            </Badge>
+          </div>
+        )}
       </div>
 
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center space-x-1 sm:space-x-2">
         <ThemeToggle />
         <Button variant="ghost" size="sm" onClick={onOpenSettings}>
           <Settings className="h-4 w-4" />
