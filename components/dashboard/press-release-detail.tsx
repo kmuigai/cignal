@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Bookmark, BookmarkPlus, ExternalLink, Loader2, ArrowLeft } from "lucide-react"
 import { useContentExtraction } from "@/hooks/use-content-extraction"
 import { useAIAnalysis } from "@/hooks/use-ai-analysis"
+import { useSummaryCollapse } from "@/hooks/use-summary-collapse"
 import { AIAnalysisSection } from "./ai-analysis-section"
 
 interface PressReleaseDetailProps {
@@ -20,6 +21,9 @@ interface PressReleaseDetailProps {
 export function PressReleaseDetail({ release, company, isBookmarked, onToggleBookmark, onBackToFeed, showBackButton }: PressReleaseDetailProps) {
   // Extract full content from the source URL
   const { data: extractionResult, loading: extractionLoading } = useContentExtraction(release.sourceUrl)
+
+  // Summary collapse state management
+  const { isCollapsed, toggle: toggleCollapse, isLoaded: collapseStateLoaded } = useSummaryCollapse()
 
   // Determine which content to display
   const getDisplayContent = () => {
@@ -147,118 +151,236 @@ export function PressReleaseDetail({ release, company, isBookmarked, onToggleBoo
 
   return (
     <div className="flex flex-col h-full bg-background">
-      {/* Header - Fixed */}
-      <div className="shrink-0 p-6 border-b border-border bg-background">
-        {/* Mobile Back Button */}
-        {showBackButton && onBackToFeed && (
-          <div className="mb-4 lg:hidden">
+      {/* Mobile Layout - Original design */}
+      <div className="lg:hidden flex flex-col h-full">
+        {/* Header - Fixed */}
+        <div className="shrink-0 p-6 border-b border-border bg-background">
+          {/* Mobile Back Button */}
+          {showBackButton && onBackToFeed && (
+            <div className="mb-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onBackToFeed}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Feed
+              </Button>
+            </div>
+          )}
+          
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <Badge variant="secondary">{company?.name}</Badge>
+              <span className="text-sm text-muted-foreground">{formatDate(release.publishedAt)}</span>
+            </div>
             <Button
               variant="ghost"
               size="sm"
-              onClick={onBackToFeed}
+              onClick={onToggleBookmark}
               className="text-muted-foreground hover:text-foreground"
             >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Feed
+              {isBookmarked ? <Bookmark className="h-4 w-4 fill-current" /> : <BookmarkPlus className="h-4 w-4" />}
             </Button>
           </div>
-        )}
-        
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <Badge variant="secondary">{company?.name}</Badge>
-            <span className="text-sm text-muted-foreground">{formatDate(release.publishedAt)}</span>
+
+          <h1 className="text-xl font-semibold mb-4">{release.title}</h1>
+
+          {/* AI Summary - Mobile (original behavior) */}
+          <AIAnalysisSection
+            analysis={analysis}
+            loading={aiLoading}
+            error={aiError}
+            onRetry={retryAnalysis}
+            fromCache={fromCache}
+            cacheAge={cacheAge}
+          />
+
+          {/* Source Link */}
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <span>Source:</span>
+            <a
+              href={release.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:text-primary/80 flex items-center gap-1"
+            >
+              PR Newswire
+              <ExternalLink className="h-3 w-3" />
+            </a>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onToggleBookmark}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            {isBookmarked ? <Bookmark className="h-4 w-4 fill-current" /> : <BookmarkPlus className="h-4 w-4" />}
-          </Button>
         </div>
 
-        <h1 className="text-xl font-semibold mb-4">{release.title}</h1>
+        {/* Content - Mobile scrollable */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="p-6">
+            {extractionLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center space-y-3">
+                  <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Loading full content...</p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {extractionResult && !extractionResult.success && (
+                  <div className="bg-yellow-50 dark:bg-yellow-950/50 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 mb-4">
+                    <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                      <strong>Full content unavailable.</strong> Showing RSS summary as fallback.
+                    </p>
+                  </div>
+                )}
 
-        {/* AI Summary - Now powered by real Claude analysis */}
-        <AIAnalysisSection
-          analysis={analysis}
-          loading={aiLoading}
-          error={aiError}
-          onRetry={retryAnalysis}
-          fromCache={fromCache}
-          cacheAge={cacheAge}
-        />
+                {displayContent && (
+                  <div className="prose prose-gray prose-sm max-w-none dark:prose-invert">
+                    <div className="text-foreground leading-relaxed space-y-4">
+                      {renderHighlightedContent(displayContent, release.highlights || [])}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
 
-        {/* Source Link */}
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <span>Source:</span>
-          <a
-            href={release.sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary hover:text-primary/80 flex items-center gap-1"
-          >
-            PR Newswire
-            <ExternalLink className="h-3 w-3" />
-          </a>
+        {/* Legend - Mobile */}
+        <div className="shrink-0 p-4 border-t border-border bg-muted/30">
+          <div className="flex flex-wrap gap-4 text-xs">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-blue-100 dark:bg-blue-900/50 rounded"></div>
+              <span>Financial Data</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-green-100 dark:bg-green-900/50 rounded"></div>
+              <span>Opportunities</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-red-100 dark:bg-red-900/50 rounded"></div>
+              <span>Risks/Threats</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-yellow-100 dark:bg-yellow-900/50 rounded"></div>
+              <span>Strategic Moves</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Content - Scrollable */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="p-6">
-          {extractionLoading ? (
-            // Loading state
-            <div className="flex items-center justify-center py-12">
-              <div className="text-center space-y-3">
-                <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Loading full content...</p>
+      {/* Desktop Layout - New adaptive design */}
+      <div className="hidden lg:flex flex-col h-full">
+        {/* Header - Desktop minimal header */}
+        <div className="shrink-0 p-4 border-b border-border bg-background">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <Badge variant="secondary">{company?.name}</Badge>
+              <span className="text-sm text-muted-foreground">{formatDate(release.publishedAt)}</span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onToggleBookmark}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              {isBookmarked ? <Bookmark className="h-4 w-4 fill-current" /> : <BookmarkPlus className="h-4 w-4" />}
+            </Button>
+          </div>
+
+          <h1 className="text-lg font-semibold mb-2">{release.title}</h1>
+
+          {/* Source Link */}
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <span>Source:</span>
+            <a
+              href={release.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:text-primary/80 flex items-center gap-1"
+            >
+              PR Newswire
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          </div>
+        </div>
+
+        {/* Main Content Area - Flexible Layout */}
+        <div className="flex-1 min-h-0 flex flex-col">
+          {/* AI Summary Section - Collapsible on Desktop */}
+          {collapseStateLoaded && (
+            <div 
+              className={`
+                shrink-0 border-b border-border bg-background transition-all duration-300 ease-in-out overflow-hidden
+                ${isCollapsed ? 'h-auto' : 'h-[30vh]'}
+              `}
+            >
+              <div className={`h-full ${isCollapsed ? 'p-0' : 'p-4 overflow-y-auto'}`}>
+                <AIAnalysisSection
+                  analysis={analysis}
+                  loading={aiLoading}
+                  error={aiError}
+                  onRetry={retryAnalysis}
+                  fromCache={fromCache}
+                  cacheAge={cacheAge}
+                  isCollapsed={isCollapsed}
+                  onToggleCollapse={toggleCollapse}
+                  showCollapseControls={true}
+                />
               </div>
             </div>
-          ) : (
-            <div className="space-y-6">
-              {/* Content status indicator */}
-              {extractionResult && !extractionResult.success && (
-                <div className="bg-yellow-50 dark:bg-yellow-950/50 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 mb-4">
-                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                    <strong>Full content unavailable.</strong> Showing RSS summary as fallback.
-                  </p>
-                </div>
-              )}
+          )}
 
-              {/* Main Content with AI-powered highlighting */}
-              {displayContent && (
-                <div className="prose prose-gray prose-sm max-w-none dark:prose-invert">
-                  <div className="text-foreground leading-relaxed space-y-4">
-                    {renderHighlightedContent(displayContent, release.highlights || [])}
+          {/* Article Content - Takes remaining space */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="p-6">
+              {extractionLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-center space-y-3">
+                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">Loading full content...</p>
                   </div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {extractionResult && !extractionResult.success && (
+                    <div className="bg-yellow-50 dark:bg-yellow-950/50 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 mb-4">
+                      <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                        <strong>Full content unavailable.</strong> Showing RSS summary as fallback.
+                      </p>
+                    </div>
+                  )}
+
+                  {displayContent && (
+                    <div className="prose prose-gray prose-lg max-w-none dark:prose-invert">
+                      <div className="text-foreground leading-relaxed space-y-4">
+                        {renderHighlightedContent(displayContent, release.highlights || [])}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
-        </div>
-      </div>
+          </div>
 
-      {/* Legend - Fixed */}
-      <div className="shrink-0 p-4 border-t border-border bg-muted/30">
-        <div className="flex flex-wrap gap-4 text-xs">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-blue-100 dark:bg-blue-900/50 rounded"></div>
-            <span>Financial Data</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-green-100 dark:bg-green-900/50 rounded"></div>
-            <span>Opportunities</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-red-100 dark:bg-red-900/50 rounded"></div>
-            <span>Risks/Threats</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-yellow-100 dark:bg-yellow-900/50 rounded"></div>
-            <span>Strategic Moves</span>
+          {/* Legend - Desktop */}
+          <div className="shrink-0 p-4 border-t border-border bg-muted/30">
+            <div className="flex flex-wrap gap-6 text-xs">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-blue-100 dark:bg-blue-900/50 rounded"></div>
+                <span>Financial Data</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-green-100 dark:bg-green-900/50 rounded"></div>
+                <span>Opportunities</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-red-100 dark:bg-red-900/50 rounded"></div>
+                <span>Risks/Threats</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-yellow-100 dark:bg-yellow-900/50 rounded"></div>
+                <span>Strategic Moves</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

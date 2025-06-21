@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, RefreshCw, AlertCircle, Brain, Clock, Settings } from "lucide-react"
+import { Loader2, RefreshCw, AlertCircle, Brain, Clock, Settings, ChevronUp, ChevronDown } from "lucide-react"
 
 interface AIAnalysisSectionProps {
   analysis: {
@@ -18,6 +18,9 @@ interface AIAnalysisSectionProps {
   onRetry: () => void
   fromCache: boolean
   cacheAge?: string
+  isCollapsed?: boolean
+  onToggleCollapse?: () => void
+  showCollapseControls?: boolean
 }
 
 export function AIAnalysisSection({ 
@@ -26,17 +29,67 @@ export function AIAnalysisSection({
   error, 
   onRetry, 
   fromCache, 
-  cacheAge 
+  cacheAge,
+  isCollapsed = false,
+  onToggleCollapse,
+  showCollapseControls = false
 }: AIAnalysisSectionProps) {
+  const renderHeader = () => (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <Brain className="h-4 w-4 text-muted-foreground" />
+        <h2 className="text-sm font-medium">AI Summary</h2>
+        {loading && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
+        {fromCache && !loading && (
+          <Badge variant="secondary" className="text-xs">
+            <Clock className="h-3 w-3 mr-1" />
+            {cacheAge || 'Cached'}
+          </Badge>
+        )}
+      </div>
+      <div className="flex items-center gap-1">
+        {!loading && (
+          <Button 
+            onClick={onRetry} 
+            size="sm" 
+            variant="ghost" 
+            className="h-6 w-6 p-0" 
+            title={fromCache ? "Generate fresh analysis" : "Refresh analysis"}
+          >
+            <RefreshCw className="h-3 w-3" />
+          </Button>
+        )}
+        {showCollapseControls && onToggleCollapse && (
+          <Button
+            onClick={onToggleCollapse}
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0 lg:flex hidden"
+            title={isCollapsed ? "Expand AI summary" : "Collapse AI summary"}
+          >
+            {isCollapsed ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+
+  if (isCollapsed && showCollapseControls) {
+    return (
+      <div className="hidden lg:block bg-muted/30 rounded-lg p-3 mb-4 border-l-2 border-primary/20">
+        {renderHeader()}
+        <p className="text-xs text-muted-foreground mt-1 truncate">
+          {loading ? "Analyzing..." : error ? "Analysis failed" : analysis?.summary || "Click to expand AI summary"}
+        </p>
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="bg-muted/50 rounded-lg p-4 mb-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Brain className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-medium">AI Summary</h2>
-          <Loader2 className="h-3 w-3 animate-spin text-primary" />
-        </div>
-        <div className="space-y-3">
+        {renderHeader()}
+        <div className="space-y-3 mt-3">
           <div className="animate-pulse">
             <div className="h-3 bg-muted rounded w-full mb-2"></div>
             <div className="h-3 bg-muted rounded w-4/5 mb-2"></div>
@@ -53,17 +106,8 @@ export function AIAnalysisSection({
     
     return (
       <div className={`${isAPIKeyError ? 'bg-yellow-50 dark:bg-yellow-950/50 border border-yellow-200 dark:border-yellow-800' : 'bg-destructive/10 border border-destructive/20'} rounded-lg p-4 mb-4`}>
-        <div className="flex items-center gap-2 mb-2">
-          {isAPIKeyError ? (
-            <Settings className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
-          ) : (
-            <AlertCircle className="h-4 w-4 text-destructive" />
-          )}
-          <h2 className={`text-sm font-medium ${isAPIKeyError ? 'text-yellow-800 dark:text-yellow-200' : 'text-destructive'}`}>
-            {isAPIKeyError ? 'API Key Required' : 'AI Analysis Failed'}
-          </h2>
-        </div>
-        <p className={`text-sm mb-3 ${isAPIKeyError ? 'text-yellow-700 dark:text-yellow-300' : 'text-destructive/80'}`}>
+        {renderHeader()}
+        <p className={`text-sm mb-3 mt-2 ${isAPIKeyError ? 'text-yellow-700 dark:text-yellow-300' : 'text-destructive/80'}`}>
           {error}
         </p>
         <div className="flex gap-2">
@@ -84,7 +128,6 @@ export function AIAnalysisSection({
               size="sm"
               variant="secondary"
               onClick={() => {
-                // Scroll to settings section or show settings
                 const settingsSection = document.querySelector('[data-settings-section]')
                 if (settingsSection) {
                   settingsSection.scrollIntoView({ behavior: 'smooth' })
@@ -103,40 +146,17 @@ export function AIAnalysisSection({
   if (!analysis) {
     return (
       <div className="bg-muted/50 rounded-lg p-4 mb-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Brain className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-medium">AI Summary</h2>
-        </div>
-        <p className="text-sm text-muted-foreground">No AI analysis available</p>
+        {renderHeader()}
+        <p className="text-sm text-muted-foreground mt-2">No AI analysis available</p>
       </div>
     )
   }
 
   return (
     <div className="bg-muted/50 rounded-lg p-4 mb-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Brain className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-medium">AI Summary</h2>
-          {fromCache && (
-            <Badge variant="secondary" className="text-xs">
-              <Clock className="h-3 w-3 mr-1" />
-              {cacheAge || 'Cached'}
-            </Badge>
-          )}
-        </div>
-        <Button 
-          onClick={onRetry} 
-          size="sm" 
-          variant="ghost" 
-          className="h-6 w-6 p-0" 
-          title={fromCache ? "Generate fresh analysis" : "Refresh analysis"}
-        >
-          <RefreshCw className="h-3 w-3" />
-        </Button>
-      </div>
+      {renderHeader()}
 
-      <div className="space-y-3">
+      <div className="space-y-3 mt-3">
         <p className="text-sm text-foreground leading-relaxed">{analysis.summary}</p>
 
         {analysis.keyPoints && analysis.keyPoints.length > 0 && (
