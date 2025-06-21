@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server"
+import { processHTMLContent } from "@/lib/html-sanitizer"
 
 interface ExtractContentResponse {
   success: boolean
   content: string
+  htmlContent?: string
+  textContent?: string
   error?: string
 }
 
@@ -50,17 +53,26 @@ export async function GET(request: Request) {
     }
 
     // Extract the main content from PR Newswire HTML
-    const extractedContent = extractPRNewswireContent(html)
+    const rawContent = extractPRNewswireContent(html)
 
-    if (!extractedContent || extractedContent.trim().length === 0) {
+    if (!rawContent || rawContent.trim().length === 0) {
       throw new Error("Could not extract content from HTML")
     }
 
-    console.log(`✅ Successfully extracted ${extractedContent.length} characters`)
+    // Process the HTML content using our new sanitization approach
+    const { sanitizedHTML, textContent, isValid } = processHTMLContent(rawContent, true)
+
+    if (!isValid || (!sanitizedHTML && !textContent)) {
+      throw new Error("Failed to process extracted content")
+    }
+
+    console.log(`✅ Successfully extracted and processed content: ${sanitizedHTML ? sanitizedHTML.length : textContent.length} characters`)
 
     return NextResponse.json({
       success: true,
-      content: extractedContent,
+      content: sanitizedHTML || textContent, // Primary content (HTML preferred)
+      htmlContent: sanitizedHTML, // Explicit HTML content
+      textContent: textContent, // Fallback text content
     })
   } catch (error) {
     console.error("❌ Content extraction failed:", error)
@@ -128,27 +140,27 @@ function extractPRNewswireContent(html: string): string {
 
 function extractContentBySelector(html: string, selector: string): string | null {
   try {
-    // Simple regex-based extraction (in production, consider using a proper HTML parser)
+    // Simple regex-based extraction for HTML content
     let pattern: RegExp
 
     if (selector.startsWith(".")) {
-      // Class selector
+      // Class selector - capture the full HTML content including tags
       const className = selector.substring(1)
-      pattern = new RegExp(`<[^>]*class="[^"]*${className}[^"]*"[^>]*>(.*?)<\/[^>]+>`, "gis")
+      pattern = new RegExp(`<[^>]*class="[^"]*${className}[^"]*"[^>]*>([\\s\\S]*?)<\\/[^>]+>`, "gi")
     } else if (selector.startsWith("#")) {
       // ID selector
       const id = selector.substring(1)
-      pattern = new RegExp(`<[^>]*id="${id}"[^>]*>(.*?)<\/[^>]+>`, "gis")
+      pattern = new RegExp(`<[^>]*id="${id}"[^>]*>([\\s\\S]*?)<\\/[^>]+>`, "gi")
     } else {
       // Tag selector
-      pattern = new RegExp(`<${selector}[^>]*>(.*?)<\/${selector}>`, "gis")
+      pattern = new RegExp(`<${selector}[^>]*>([\\s\\S]*?)<\\/${selector}>`, "gi")
     }
 
     const match = pattern.exec(html)
     if (match && match[1]) {
-      const cleanedContent = cleanHtmlContent(match[1])
-      const filteredContent = filterUnwantedContent(cleanedContent)
-      return validateContentQuality(filteredContent) ? filteredContent : null
+      // Return the raw HTML content - don't strip tags here
+      const rawContent = match[1].trim()
+      return validateContentQuality(rawContent) ? rawContent : null
     }
 
     return null
@@ -160,26 +172,24 @@ function extractContentBySelector(html: string, selector: string): string | null
 
 function extractFallbackContent(html: string): string | null {
   try {
-    // Look for common press release patterns
-    const patterns = [
-      // Look for content between common press release markers
-      /(?:NEW YORK|LONDON|SAN FRANCISCO|CHICAGO|LOS ANGELES|BOSTON|WASHINGTON)[^<]*?--[^<]*?--(.*?)(?:<\/|$)/gis,
+          // Look for common press release patterns - keep HTML structure
+      const patterns = [
+        // Look for content between common press release markers
+        /(?:NEW YORK|LONDON|SAN FRANCISCO|CHICAGO|LOS ANGELES|BOSTON|WASHINGTON)[^<]*?--[^<]*?--([\s\S]*?)(?:<\/section|<\/div|$)/gi,
 
-      // Look for content after dateline patterns
-      /\b[A-Z]{2,}[^<]*?,\s*[^<]*?\d{4}[^<]*?--(.*?)(?:<\/|$)/gis,
+        // Look for content after dateline patterns
+        /\b[A-Z]{2,}[^<]*?,\s*[^<]*?\d{4}[^<]*?--([\s\S]*?)(?:<\/section|<\/div|$)/gi,
 
-      // Look for paragraphs with substantial content
-      /<p[^>]*>([^<]{100,}.*?)<\/p>/gis,
-    ]
+        // Look for substantial content blocks
+        /<div[^>]*>([^<]*<p[^>]*>[^<]{100,}[\s\S]*?)<\/div>/gi,
+      ]
 
     for (const pattern of patterns) {
       const matches = html.match(pattern)
       if (matches && matches.length > 0) {
-        const content = matches.join("\n\n")
-        const cleaned = cleanHtmlContent(content)
-        const filtered = filterUnwantedContent(cleaned)
-        if (validateContentQuality(filtered)) {
-          return filtered
+        const content = matches.join("")
+        if (validateContentQuality(content)) {
+          return content
         }
       }
     }
@@ -192,125 +202,18 @@ function extractFallbackContent(html: string): string | null {
 }
 
 /**
- * Enhanced content filtering to remove unwanted elements
- */
-function filterUnwantedContent(content: string): string {
-  if (!content) return ""
-
-  let filtered = content
-
-  // Social Media and Sharing Text Patterns
-  const socialMediaPatterns = [
-    // Sharing phrases
-    /share\s+this\s+article[^\n]*/gi,
-    /share\s+on\s+(x|twitter|facebook|linkedin|instagram)[^\n]*/gi,
-    /share\s+to[x|facebook|linkedin|instagram][^\n]*/gi,
-    /share\s+via\s+(email|link)[^\n]*/gi,
-    
-    // Social media follow patterns
-    /follow\s+us\s+on[^\n]*/gi,
-    /connect\s+with\s+us[^\n]*/gi,
-    /find\s+us\s+on[^\n]*/gi,
-    
-    // Social media platform mentions in sharing context
-    /like\s+us\s+on\s+facebook[^\n]*/gi,
-    /follow\s+@\w+[^\n]*/gi,
-    
-    // Subscribe patterns
-    /subscribe\s+to\s+(our\s+)?(newsletter|updates|feed)[^\n]*/gi,
-    /sign\s+up\s+for[^\n]*/gi,
-  ]
-
-  // Navigation and UI Element Patterns
-  const navigationPatterns = [
-    // Breadcrumb navigation
-    /home\s*>\s*news\s*>[^\n]*/gi,
-    /home\s*»\s*news\s*»[^\n]*/gi,
-    /you\s+are\s+here:[^\n]*/gi,
-    
-    // Previous/Next navigation
-    /previous\s+(article|story|news)[^\n]*/gi,
-    /next\s+(article|story|news)[^\n]*/gi,
-    /related\s+(articles|stories|news)[^\n]*/gi,
-    
-    // Read more links
-    /read\s+more\s+at[^\n]*/gi,
-    /continue\s+reading[^\n]*/gi,
-    /full\s+story\s+at[^\n]*/gi,
-  ]
-
-  // Advertisement and Promotional Patterns
-  const adPatterns = [
-    /advertisement\s*$/gi,
-    /sponsored\s+content[^\n]*/gi,
-    /promotional\s+content[^\n]*/gi,
-    /learn\s+more\s+at\s+\S+[^\n]*/gi,
-    /visit\s+us\s+at\s+\S+[^\n]*/gi,
-    /for\s+more\s+information[^\n]*/gi,
-  ]
-
-  // Footer and Contact Information Patterns
-  const footerPatterns = [
-    // Copyright notices
-    /©\s*\d{4}[^\n]*/gi,
-    /copyright\s+\d{4}[^\n]*/gi,
-    /all\s+rights\s+reserved[^\n]*/gi,
-    
-    // Contact information blocks
-    /contact\s+(us|information)[^\n]*/gi,
-    /for\s+media\s+inquiries[^\n]*/gi,
-    /press\s+contact[^\n]*/gi,
-    /media\s+contact[^\n]*/gi,
-    
-    // Company boilerplate
-    /about\s+the\s+company[^\n]*/gi,
-    /about\s+\w+(\s+\w+)*\s*:?\s*$/gi,
-  ]
-
-  // Website and Email Pattern Cleanup
-  const webPatterns = [
-    // Remove standalone URLs at end of sentences
-    /\s+https?:\/\/\S+$/gi,
-    /\s+www\.\S+$/gi,
-    
-    // Remove email addresses in contact context
-    /email:\s*\S+@\S+/gi,
-    /contact:\s*\S+@\S+/gi,
-  ]
-
-  // Apply all filters
-  const allPatterns = [
-    ...socialMediaPatterns,
-    ...navigationPatterns,
-    ...adPatterns,
-    ...footerPatterns,
-    ...webPatterns,
-  ]
-
-  allPatterns.forEach(pattern => {
-    filtered = filtered.replace(pattern, "")
-  })
-
-  // Clean up extra whitespace created by filtering
-  filtered = filtered
-    .replace(/\n\s*\n\s*\n/g, "\n\n") // Multiple line breaks to double
-    .replace(/[ \t]+/g, " ") // Multiple spaces to single
-    .replace(/^\s+|\s+$/gm, "") // Trim lines
-    .trim()
-
-  return filtered
-}
-
-/**
- * Validate content quality after extraction and filtering
+ * Validate content quality after extraction
  */
 function validateContentQuality(content: string): boolean {
   if (!content || content.trim().length < 50) {
     return false
   }
 
+  // Extract text for word counting (remove HTML tags temporarily)
+  const textContent = content.replace(/<[^>]*>/g, '').trim()
+  
   // Check for minimum word count
-  const words = content.trim().split(/\s+/)
+  const words = textContent.split(/\s+/)
   if (words.length < 20) {
     return false
   }
@@ -323,219 +226,16 @@ function validateContentQuality(content: string): boolean {
   ]
 
   for (const pattern of unwantedStartPatterns) {
-    if (pattern.test(content.trim())) {
+    if (pattern.test(textContent)) {
       return false
     }
   }
 
   // Check for reasonable sentence structure (contains periods)
-  const sentenceCount = (content.match(/[.!?]+/g) || []).length
+  const sentenceCount = (textContent.match(/[.!?]+/g) || []).length
   if (sentenceCount < 2) {
     return false
   }
 
   return true
-}
-
-function cleanHtmlContent(html: string): string {
-  if (!html) return ""
-
-  const cleaned = html
-    // Remove script and style tags completely
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-
-    // Remove HTML comments
-    .replace(/<!--[\s\S]*?-->/g, "")
-
-    // Remove common unwanted HTML elements
-    .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, "") // Navigation
-    .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, "") // Footer
-    .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, "") // Sidebar content
-    .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, "") // Header content
-    
-    // Remove social media and share buttons
-    .replace(/<[^>]*class="[^"]*share[^"]*"[^>]*>[\s\S]*?<\/[^>]+>/gi, "")
-    .replace(/<[^>]*class="[^"]*social[^"]*"[^>]*>[\s\S]*?<\/[^>]+>/gi, "")
-
-    // Convert common HTML entities
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&apos;/g, "'")
-    .replace(/&mdash;/g, "—")
-    .replace(/&ndash;/g, "–")
-    .replace(/&hellip;/g, "...")
-
-    // Enhanced paragraph handling - preserve structure better
-    // Handle paragraph tags with better spacing preservation
-    .replace(/<\/p>\s*<p[^>]*>/gi, "\n\n")
-    .replace(/<p[^>]*>/gi, "")
-    .replace(/<\/p>/gi, "\n\n")
-
-    // Handle headings with proper spacing
-    .replace(/<\/h[1-6]>\s*<h[1-6][^>]*>/gi, "\n\n")
-    .replace(/<h[1-6][^>]*>/gi, "\n\n")
-    .replace(/<\/h[1-6]>/gi, "\n\n")
-
-    // Handle blockquotes with proper spacing
-    .replace(/<\/blockquote>\s*<blockquote[^>]*>/gi, "\n\n")
-    .replace(/<blockquote[^>]*>/gi, "\n\n")
-    .replace(/<\/blockquote>/gi, "\n\n")
-
-    // Convert line breaks intelligently
-    .replace(/<br[^>]*>\s*<br[^>]*>/gi, "\n\n") // Double breaks = paragraph
-    .replace(/<br[^>]*>/gi, "\n") // Single breaks = line break
-
-    // Handle div tags more intelligently - preserve paragraph structure
-    .replace(/<\/div>\s*<div[^>]*>/gi, "\n\n")
-    .replace(/<div[^>]*>/gi, "")
-    .replace(/<\/div>/gi, "\n")
-
-    // Enhanced list handling with better structure preservation
-    .replace(/<\/ul>\s*<ul[^>]*>/gi, "\n") // Connect adjacent lists
-    .replace(/<\/ol>\s*<ol[^>]*>/gi, "\n")
-    .replace(/<ul[^>]*>/gi, "\n")
-    .replace(/<\/ul>/gi, "\n\n")
-    .replace(/<ol[^>]*>/gi, "\n")
-    .replace(/<\/ol>/gi, "\n\n")
-    .replace(/<\/li>\s*<li[^>]*>/gi, "\n")
-    .replace(/<li[^>]*>/gi, "• ")
-    .replace(/<\/li>/gi, "\n")
-
-    // Handle table structures
-    .replace(/<\/tr>\s*<tr[^>]*>/gi, "\n")
-    .replace(/<\/td>\s*<td[^>]*>/gi, " | ")
-    .replace(/<\/th>\s*<th[^>]*>/gi, " | ")
-    .replace(/<t[hd][^>]*>/gi, "")
-    .replace(/<\/t[hd]>/gi, "")
-    .replace(/<table[^>]*>/gi, "\n")
-    .replace(/<\/table>/gi, "\n\n")
-    .replace(/<tr[^>]*>/gi, "")
-    .replace(/<\/tr>/gi, "\n")
-
-    // Handle emphasis and formatting tags
-    .replace(/<strong[^>]*>/gi, "**")
-    .replace(/<\/strong>/gi, "**")
-    .replace(/<b[^>]*>/gi, "**")
-    .replace(/<\/b>/gi, "**")
-    .replace(/<em[^>]*>/gi, "*")
-    .replace(/<\/em>/gi, "*")
-    .replace(/<i[^>]*>/gi, "*")
-    .replace(/<\/i>/gi, "*")
-
-    // Remove all other HTML tags
-    .replace(/<[^>]*>/g, "")
-
-    // Enhanced whitespace cleanup and paragraph detection
-    .replace(/\n\s*\n\s*\n+/g, "\n\n") // Multiple line breaks to double
-    .replace(/[ \t]+/g, " ") // Multiple spaces to single
-    .replace(/^\s+|\s+$/gm, "") // Trim lines
-    .trim()
-
-  // Post-processing: Improve paragraph detection
-  return improveTextStructure(cleaned)
-}
-
-/**
- * Improve text structure by detecting natural paragraph boundaries
- */
-function improveTextStructure(text: string): string {
-  if (!text) return ""
-
-  // Split into potential paragraphs
-  let paragraphs = text.split(/\n\n+/)
-  
-  // Process each paragraph
-  paragraphs = paragraphs.map(paragraph => {
-    if (!paragraph.trim()) return ""
-    
-    // Clean up the paragraph
-    paragraph = paragraph.trim()
-    
-    // If paragraph is very long (>1000 chars), try to split it intelligently
-    if (paragraph.length > 1000) {
-      return splitLongParagraph(paragraph)
-    }
-    
-    return paragraph
-  }).filter(p => p.length > 0)
-
-  // Merge very short paragraphs with the next one (unless they look like headers)
-  const mergedParagraphs = []
-  for (let i = 0; i < paragraphs.length; i++) {
-    const current = paragraphs[i]
-    const next = paragraphs[i + 1]
-    
-    // If current paragraph is very short and doesn't look like a standalone element
-    if (current.length < 50 && next && !isStandaloneElement(current)) {
-      // Merge with next paragraph
-      mergedParagraphs.push(current + " " + next)
-      i++ // Skip the next paragraph since we merged it
-    } else {
-      mergedParagraphs.push(current)
-    }
-  }
-
-  return mergedParagraphs.join("\n\n")
-}
-
-/**
- * Split long paragraphs at natural boundaries
- */
-function splitLongParagraph(paragraph: string): string {
-  // Look for natural break points
-  const sentences = paragraph.split(/(?<=[.!?])\s+(?=[A-Z])/)
-  
-  if (sentences.length < 2) return paragraph
-  
-  const chunks = []
-  let currentChunk = ""
-  
-  for (const sentence of sentences) {
-    if (currentChunk.length + sentence.length > 500 && currentChunk.length > 0) {
-      chunks.push(currentChunk.trim())
-      currentChunk = sentence
-    } else {
-      currentChunk += (currentChunk ? " " : "") + sentence
-    }
-  }
-  
-  if (currentChunk.trim()) {
-    chunks.push(currentChunk.trim())
-  }
-  
-  return chunks.join("\n\n")
-}
-
-/**
- * Check if a text element should stand alone (like headers, quotes, lists)
- */
-function isStandaloneElement(text: string): boolean {
-  const trimmed = text.trim()
-  
-  // Check for list items
-  if (trimmed.startsWith("•") || /^\d+\./.test(trimmed)) {
-    return true
-  }
-  
-  // Check for quoted text
-  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    return true
-  }
-  
-  // Check for emphasis (all caps, bold markers)
-  if (trimmed === trimmed.toUpperCase() && trimmed.length < 100) {
-    return true
-  }
-  
-  // Check for potential headers (short, ends with colon)
-  if (trimmed.length < 80 && trimmed.endsWith(":")) {
-    return true
-  }
-  
-  return false
 }
