@@ -175,8 +175,8 @@ export function PressReleaseDetail({ release, company, isBookmarked, onToggleBoo
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex-none border-b bg-background px-6 py-4">
-        <div className="flex items-center justify-between mb-4">
+      <div className="flex-none border-b bg-background px-4 py-1 sm:px-6 sm:py-2">
+        <div className="flex items-center justify-between mb-2">
           {showBackButton && (
             <Button variant="ghost" size="sm" onClick={onBackToFeed} className="lg:hidden">
               <ArrowLeft className="h-4 w-4 mr-2" />
@@ -207,7 +207,7 @@ export function PressReleaseDetail({ release, company, isBookmarked, onToggleBoo
           </div>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-2">
           <div className="flex items-start gap-3">
             {company && (
               <Badge variant="secondary" className="flex-none">
@@ -222,7 +222,7 @@ export function PressReleaseDetail({ release, company, isBookmarked, onToggleBoo
           <h1 className="text-xl font-semibold leading-tight">{release.title}</h1>
           
           {/* AI Analysis Section - Moved to top with desktop collapse functionality */}
-          <div className={`${!isCollapsed ? 'border-t pt-3' : 'pt-3'}`}>
+          <div className={`${!isCollapsed ? 'border-t pt-2' : 'pt-1'}`}>
             <AIAnalysisSection
               analysis={analysis}
               loading={aiLoading}
@@ -240,7 +240,7 @@ export function PressReleaseDetail({ release, company, isBookmarked, onToggleBoo
 
       {/* Content */}
       <div className="flex-1 overflow-auto">
-        <div className="px-6 py-6 space-y-6">
+        <div className="px-4 pt-2 pb-4 sm:px-6 sm:pt-3 sm:pb-6 space-y-3 sm:space-y-4">
           {/* Main article content */}
           <div className="space-y-4">
             {renderContent()}
