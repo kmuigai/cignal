@@ -75,21 +75,25 @@ export async function GET(request: Request) {
 
 function extractPRNewswireContent(html: string): string {
   try {
-    // Common PR Newswire content selectors (in order of preference)
+    // Enhanced PR Newswire content selectors (in order of preference)
     const contentSelectors = [
-      // Main content areas
+      // Most specific PR Newswire selectors
       ".release-body",
-      ".news-release-content",
+      ".news-release-content", 
+      ".release-text",
+      ".pr-body",
       ".content-body",
       ".press-release-content",
       ".release-content",
 
-      // Article content
+      // Article-specific content areas
+      ".news-content",
       "article .content",
       ".article-content",
       ".story-content",
+      ".article-body",
 
-      // Generic content areas
+      // Generic content areas (lower priority)
       ".main-content",
       "#main-content",
       ".content",
@@ -99,11 +103,11 @@ function extractPRNewswireContent(html: string): string {
       "article",
     ]
 
-    // Try each selector until we find content
+    // Try each selector until we find quality content
     for (const selector of contentSelectors) {
       const content = extractContentBySelector(html, selector)
       if (content && content.length > 100) {
-        // Minimum content length
+        console.log(`📝 Content extracted using selector: ${selector}`)
         return content
       }
     }
@@ -111,6 +115,7 @@ function extractPRNewswireContent(html: string): string {
     // If no specific selectors work, try to extract from common patterns
     const fallbackContent = extractFallbackContent(html)
     if (fallbackContent && fallbackContent.length > 100) {
+      console.log(`📝 Content extracted using fallback patterns`)
       return fallbackContent
     }
 
@@ -141,7 +146,9 @@ function extractContentBySelector(html: string, selector: string): string | null
 
     const match = pattern.exec(html)
     if (match && match[1]) {
-      return cleanHtmlContent(match[1])
+      const cleanedContent = cleanHtmlContent(match[1])
+      const filteredContent = filterUnwantedContent(cleanedContent)
+      return validateContentQuality(filteredContent) ? filteredContent : null
     }
 
     return null
@@ -170,8 +177,9 @@ function extractFallbackContent(html: string): string | null {
       if (matches && matches.length > 0) {
         const content = matches.join("\n\n")
         const cleaned = cleanHtmlContent(content)
-        if (cleaned.length > 200) {
-          return cleaned
+        const filtered = filterUnwantedContent(cleaned)
+        if (validateContentQuality(filtered)) {
+          return filtered
         }
       }
     }
@@ -183,16 +191,172 @@ function extractFallbackContent(html: string): string | null {
   }
 }
 
+/**
+ * Enhanced content filtering to remove unwanted elements
+ */
+function filterUnwantedContent(content: string): string {
+  if (!content) return ""
+
+  let filtered = content
+
+  // Social Media and Sharing Text Patterns
+  const socialMediaPatterns = [
+    // Sharing phrases
+    /share\s+this\s+article[^\n]*/gi,
+    /share\s+on\s+(x|twitter|facebook|linkedin|instagram)[^\n]*/gi,
+    /share\s+to[x|facebook|linkedin|instagram][^\n]*/gi,
+    /share\s+via\s+(email|link)[^\n]*/gi,
+    
+    // Social media follow patterns
+    /follow\s+us\s+on[^\n]*/gi,
+    /connect\s+with\s+us[^\n]*/gi,
+    /find\s+us\s+on[^\n]*/gi,
+    
+    // Social media platform mentions in sharing context
+    /like\s+us\s+on\s+facebook[^\n]*/gi,
+    /follow\s+@\w+[^\n]*/gi,
+    
+    // Subscribe patterns
+    /subscribe\s+to\s+(our\s+)?(newsletter|updates|feed)[^\n]*/gi,
+    /sign\s+up\s+for[^\n]*/gi,
+  ]
+
+  // Navigation and UI Element Patterns
+  const navigationPatterns = [
+    // Breadcrumb navigation
+    /home\s*>\s*news\s*>[^\n]*/gi,
+    /home\s*»\s*news\s*»[^\n]*/gi,
+    /you\s+are\s+here:[^\n]*/gi,
+    
+    // Previous/Next navigation
+    /previous\s+(article|story|news)[^\n]*/gi,
+    /next\s+(article|story|news)[^\n]*/gi,
+    /related\s+(articles|stories|news)[^\n]*/gi,
+    
+    // Read more links
+    /read\s+more\s+at[^\n]*/gi,
+    /continue\s+reading[^\n]*/gi,
+    /full\s+story\s+at[^\n]*/gi,
+  ]
+
+  // Advertisement and Promotional Patterns
+  const adPatterns = [
+    /advertisement\s*$/gi,
+    /sponsored\s+content[^\n]*/gi,
+    /promotional\s+content[^\n]*/gi,
+    /learn\s+more\s+at\s+\S+[^\n]*/gi,
+    /visit\s+us\s+at\s+\S+[^\n]*/gi,
+    /for\s+more\s+information[^\n]*/gi,
+  ]
+
+  // Footer and Contact Information Patterns
+  const footerPatterns = [
+    // Copyright notices
+    /©\s*\d{4}[^\n]*/gi,
+    /copyright\s+\d{4}[^\n]*/gi,
+    /all\s+rights\s+reserved[^\n]*/gi,
+    
+    // Contact information blocks
+    /contact\s+(us|information)[^\n]*/gi,
+    /for\s+media\s+inquiries[^\n]*/gi,
+    /press\s+contact[^\n]*/gi,
+    /media\s+contact[^\n]*/gi,
+    
+    // Company boilerplate
+    /about\s+the\s+company[^\n]*/gi,
+    /about\s+\w+(\s+\w+)*\s*:?\s*$/gi,
+  ]
+
+  // Website and Email Pattern Cleanup
+  const webPatterns = [
+    // Remove standalone URLs at end of sentences
+    /\s+https?:\/\/\S+$/gi,
+    /\s+www\.\S+$/gi,
+    
+    // Remove email addresses in contact context
+    /email:\s*\S+@\S+/gi,
+    /contact:\s*\S+@\S+/gi,
+  ]
+
+  // Apply all filters
+  const allPatterns = [
+    ...socialMediaPatterns,
+    ...navigationPatterns,
+    ...adPatterns,
+    ...footerPatterns,
+    ...webPatterns,
+  ]
+
+  allPatterns.forEach(pattern => {
+    filtered = filtered.replace(pattern, "")
+  })
+
+  // Clean up extra whitespace created by filtering
+  filtered = filtered
+    .replace(/\n\s*\n\s*\n/g, "\n\n") // Multiple line breaks to double
+    .replace(/[ \t]+/g, " ") // Multiple spaces to single
+    .replace(/^\s+|\s+$/gm, "") // Trim lines
+    .trim()
+
+  return filtered
+}
+
+/**
+ * Validate content quality after extraction and filtering
+ */
+function validateContentQuality(content: string): boolean {
+  if (!content || content.trim().length < 50) {
+    return false
+  }
+
+  // Check for minimum word count
+  const words = content.trim().split(/\s+/)
+  if (words.length < 20) {
+    return false
+  }
+
+  // Check that content doesn't start with common unwanted patterns
+  const unwantedStartPatterns = [
+    /^(share|follow|subscribe|contact|advertisement)/i,
+    /^(home|news|previous|next)/i,
+    /^(learn more|visit us|for more)/i,
+  ]
+
+  for (const pattern of unwantedStartPatterns) {
+    if (pattern.test(content.trim())) {
+      return false
+    }
+  }
+
+  // Check for reasonable sentence structure (contains periods)
+  const sentenceCount = (content.match(/[.!?]+/g) || []).length
+  if (sentenceCount < 2) {
+    return false
+  }
+
+  return true
+}
+
 function cleanHtmlContent(html: string): string {
   if (!html) return ""
 
   const cleaned = html
     // Remove script and style tags completely
-    .replace(/<script[^>]*>.*?<\/script>/gis, "")
-    .replace(/<style[^>]*>.*?<\/style>/gis, "")
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
 
     // Remove HTML comments
-    .replace(/<!--.*?-->/gs, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
+
+    // Remove common unwanted HTML elements
+    .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, "") // Navigation
+    .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, "") // Footer
+    .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, "") // Sidebar content
+    .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, "") // Header content
+    
+    // Remove social media and share buttons
+    .replace(/<[^>]*class="[^"]*share[^"]*"[^>]*>[\s\S]*?<\/[^>]+>/gi, "")
+    .replace(/<[^>]*class="[^"]*social[^"]*"[^>]*>[\s\S]*?<\/[^>]+>/gi, "")
 
     // Convert common HTML entities
     .replace(/&nbsp;/g, " ")
@@ -203,7 +367,7 @@ function cleanHtmlContent(html: string): string {
     .replace(/&#39;/g, "'")
     .replace(/&apos;/g, "'")
 
-    // Convert paragraph tags to double line breaks
+    // Enhanced paragraph handling - preserve structure better
     .replace(/<\/p>\s*<p[^>]*>/gi, "\n\n")
     .replace(/<p[^>]*>/gi, "")
     .replace(/<\/p>/gi, "\n\n")
@@ -211,15 +375,21 @@ function cleanHtmlContent(html: string): string {
     // Convert line breaks
     .replace(/<br[^>]*>/gi, "\n")
 
-    // Convert div tags to line breaks
+    // Handle div tags more intelligently
     .replace(/<\/div>\s*<div[^>]*>/gi, "\n")
     .replace(/<div[^>]*>/gi, "")
     .replace(/<\/div>/gi, "\n")
 
+    // Handle lists
+    .replace(/<\/li>\s*<li[^>]*>/gi, "\n")
+    .replace(/<[\/]?[uo]l[^>]*>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "• ")
+    .replace(/<\/li>/gi, "\n")
+
     // Remove all other HTML tags
     .replace(/<[^>]*>/g, "")
 
-    // Clean up whitespace
+    // Enhanced whitespace cleanup
     .replace(/\n\s*\n\s*\n/g, "\n\n") // Multiple line breaks to double
     .replace(/[ \t]+/g, " ") // Multiple spaces to single
     .replace(/^\s+|\s+$/gm, "") // Trim lines
