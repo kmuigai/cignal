@@ -2,12 +2,13 @@
 
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { LogOut, Settings, Bookmark } from "lucide-react"
-import { getUserDisplayName, getUserInitials } from "@/lib/auth"
+import { getUserDisplayName, getUserInitials, getUserAvatarUrl, preloadAvatarImage } from "@/lib/auth"
 import type { User } from "@supabase/supabase-js"
+import { useState, useEffect } from "react"
 
 interface HeaderProps {
   user: User | null
@@ -19,6 +20,40 @@ interface HeaderProps {
 export function Header({ user, onSignOut, onOpenSettings, bookmarkCount = 0 }: HeaderProps) {
   const displayName = getUserDisplayName(user)
   const initials = getUserInitials(user)
+  const avatarUrl = getUserAvatarUrl(user)
+  const [imageError, setImageError] = useState(false)
+  const [imageLoading, setImageLoading] = useState(true)
+
+  // Reset image states when avatar URL changes
+  useEffect(() => {
+    if (avatarUrl) {
+      setImageError(false)
+      setImageLoading(true)
+      
+      // Preload the image for better UX
+      preloadAvatarImage(avatarUrl).then((success) => {
+        if (!success) {
+          setImageError(true)
+        }
+        setImageLoading(false)
+      })
+    } else {
+      setImageLoading(false)
+      setImageError(false)
+    }
+  }, [avatarUrl])
+
+  // Handle image load success
+  const handleImageLoad = () => {
+    setImageLoading(false)
+    setImageError(false)
+  }
+
+  // Handle image load error
+  const handleImageError = () => {
+    setImageLoading(false)
+    setImageError(true)
+  }
 
   return (
     <header className="h-16 border-b border-border flex items-center justify-between px-4 sm:px-6 bg-background">
@@ -49,9 +84,36 @@ export function Header({ user, onSignOut, onOpenSettings, bookmarkCount = 0 }: H
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+            <Button 
+              variant="ghost" 
+              className="relative h-8 w-8 rounded-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              aria-label={`${displayName}'s profile menu`}
+            >
               <Avatar className="h-8 w-8">
-                <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+                {avatarUrl && !imageError && (
+                  <AvatarImage
+                    src={avatarUrl}
+                    alt={`${displayName}'s profile picture`}
+                    onLoad={handleImageLoad}
+                    onError={handleImageError}
+                    className={`transition-opacity duration-300 ${
+                      imageLoading ? 'opacity-0' : 'opacity-100'
+                    }`}
+                  />
+                )}
+                <AvatarFallback 
+                  className={`text-xs transition-all duration-300 ${
+                    avatarUrl && !imageError && !imageLoading 
+                      ? 'opacity-0 scale-95' 
+                      : 'opacity-100 scale-100'
+                  }`}
+                >
+                  {imageLoading && avatarUrl ? (
+                    <div className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/50" />
+                  ) : (
+                    initials
+                  )}
+                </AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>

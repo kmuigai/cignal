@@ -88,18 +88,44 @@ export function getUserInitials(user: User | null): string {
   )
 }
 
-// Helper to get user avatar URL
+// Helper to validate if a URL is a valid image URL
+function isValidImageUrl(url: string): boolean {
+  try {
+    const urlObj = new URL(url)
+    // Check if it's a valid URL and has a reasonable domain
+    return urlObj.protocol === 'https:' || urlObj.protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
+// Helper to get user avatar URL with enhanced validation
 export function getUserAvatarUrl(user: User | null): string | null {
   if (!user) return null
 
   // Try user_metadata first (from OAuth providers like Google)
+  let avatarUrl: string | null = null
+
   if (user.user_metadata?.avatar_url) {
-    return user.user_metadata.avatar_url
+    avatarUrl = user.user_metadata.avatar_url
+  } else if (user.user_metadata?.picture) {
+    avatarUrl = user.user_metadata.picture
   }
 
-  if (user.user_metadata?.picture) {
-    return user.user_metadata.picture
+  // Validate the URL before returning it
+  if (avatarUrl && isValidImageUrl(avatarUrl)) {
+    return avatarUrl
   }
 
   return null
+}
+
+// Helper to preload avatar image for better UX
+export function preloadAvatarImage(url: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => resolve(true)
+    img.onerror = () => resolve(false)
+    img.src = url
+  })
 }
