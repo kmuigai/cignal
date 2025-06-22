@@ -82,17 +82,30 @@ export function ActivityFeed({
     <div className="flex flex-col h-full bg-background mobile-layout-fix">
       {/* Filter Tabs */}
       <div className="p-4 sm:p-4 border-b border-border">
-        {/* Company Filter Buttons - Horizontal scroll on mobile */}
+        {/* Company Filter Buttons - Responsive mobile-optimized tags */}
         <div className="mb-3">
           <ScrollArea className="w-full">
-            <div className="flex gap-2 pb-2 min-w-max">
+            <div className="flex gap-1 xs:gap-1.5 sm:gap-2 pb-2 min-w-max">
               {companyOptions.map((company) => (
                 <Button
                   key={company}
                   variant={selectedCompany === company ? "default" : "outline"}
                   size="sm"
                   onClick={() => onCompanyChange(company)}
-                  className="text-xs shrink-0 min-w-fit px-3 mobile-touch-target"
+                  className={cn(
+                    // Responsive text sizing - smaller on mobile, larger on desktop
+                    "text-[10px] xs:text-[11px] sm:text-xs",
+                    // Responsive padding - tighter on mobile
+                    "px-1.5 xs:px-2 sm:px-3",
+                    // Responsive height while maintaining touch targets
+                    "h-8 sm:h-9",
+                    // Core styling
+                    "shrink-0 min-w-fit font-medium",
+                    // Mobile touch optimization
+                    "mobile-touch-target touch-manipulation",
+                    // Ensure readability with proper contrast
+                    "transition-all duration-200"
+                  )}
                 >
                   {company}
                 </Button>
