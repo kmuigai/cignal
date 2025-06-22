@@ -154,24 +154,6 @@ class PressReleasesService {
   }
 
   /**
-   * Get press releases for last 30 days
-   */
-  async getRecentPressReleases(
-    userId: string,
-    companyId?: string
-  ): Promise<StoredPressRelease[]> {
-    const thirtyDaysAgo = new Date()
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-
-    return this.getPressReleases(userId, {
-      companyId,
-      since: thirtyDaysAgo.toISOString(),
-      orderBy: 'published_at',
-      order: 'desc',
-    })
-  }
-
-  /**
    * Soft delete old press releases (beyond 30 days)
    */
   async cleanupOldReleases(userId: string): Promise<number> {
@@ -202,7 +184,7 @@ class PressReleasesService {
   }
 
   /**
-   * Create RSS poll log entry
+   * Create RSS poll log
    */
   async createPollLog(
     userId: string,
@@ -215,10 +197,11 @@ class PressReleasesService {
           user_id: userId,
           company_id: data.companyId,
           poll_started_at: data.pollStartedAt,
+          poll_completed_at: data.pollCompletedAt,
           status: data.status,
-          releases_found: data.releasesFound || 0,
-          releases_new: data.releasesNew || 0,
-          releases_duplicate: data.releasesDuplicate || 0,
+          releases_found: data.releasesFound,
+          releases_new: data.releasesNew,
+          releases_duplicate: data.releasesDuplicate,
           error_message: data.errorMessage,
           error_details: data.errorDetails,
         })
@@ -238,26 +221,18 @@ class PressReleasesService {
   }
 
   /**
-   * Update poll log when completed
+   * Update RSS poll log
    */
   async updatePollLog(
     logId: string,
-    updates: {
-      status: 'success' | 'error'
-      pollCompletedAt: string
-      releasesFound?: number
-      releasesNew?: number
-      releasesDuplicate?: number
-      errorMessage?: string
-      errorDetails?: any
-    }
+    updates: Partial<CreateRSSPollLog>
   ): Promise<RSSPollLog | null> {
     try {
-      const { data, error } = await this.supabase
+      const { data: updatedLog, error } = await this.supabase
         .from('rss_poll_logs')
         .update({
-          status: updates.status,
           poll_completed_at: updates.pollCompletedAt,
+          status: updates.status,
           releases_found: updates.releasesFound,
           releases_new: updates.releasesNew,
           releases_duplicate: updates.releasesDuplicate,
@@ -273,7 +248,7 @@ class PressReleasesService {
         return null
       }
 
-      return this.mapDbToPollLog(data)
+      return this.mapDbToPollLog(updatedLog)
     } catch (error) {
       console.error('Error in updatePollLog:', error)
       return null
@@ -281,21 +256,16 @@ class PressReleasesService {
   }
 
   /**
-   * Get recent poll logs for monitoring
+   * Get recent poll logs for a user
    */
-  async getRecentPollLogs(
+  async getPollLogs(
     userId: string,
     limit: number = 50
   ): Promise<RSSPollLog[]> {
     try {
       const { data, error } = await this.supabase
         .from('rss_poll_logs')
-        .select(`
-          *,
-          companies (
-            name
-          )
-        `)
+        .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(limit)
@@ -307,7 +277,7 @@ class PressReleasesService {
 
       return (data || []).map(this.mapDbToPollLog)
     } catch (error) {
-      console.error('Error in getRecentPollLogs:', error)
+      console.error('Error in getPollLogs:', error)
       return []
     }
   }
@@ -364,7 +334,7 @@ class PressReleasesService {
   /**
    * Map database row to RSSPollLog
    */
-  protected mapDbToPollLog(data: any): RSSPollLog {
+  private mapDbToPollLog(data: any): RSSPollLog {
     return {
       id: data.id,
       userId: data.user_id,
@@ -402,14 +372,13 @@ class AdminPressReleasesService extends PressReleasesService {
 
     for (const release of releases) {
       try {
-        // Check for duplicates using admin client
+        // Check for duplicates using admin client (based on title and company and user)
         const { data: existingRelease, error: duplicateError } = await supabaseAdmin
           .from('press_releases')
           .select('id')
           .eq('user_id', userId)
           .eq('company_id', release.companyId)
-          .eq('content_hash', release.contentHash)
-          .eq('is_deleted', false)
+          .eq('title', release.title)
           .single()
 
         if (existingRelease) {
@@ -418,7 +387,7 @@ class AdminPressReleasesService extends PressReleasesService {
           continue
         }
 
-        // Create new release using admin client
+        // Create new release using admin client (include user_id)
         const { data: newRelease, error: createError } = await supabaseAdmin
           .from('press_releases')
           .insert({
@@ -429,8 +398,6 @@ class AdminPressReleasesService extends PressReleasesService {
             summary: release.summary,
             source_url: release.sourceUrl,
             published_at: release.publishedAt,
-            content_hash: release.contentHash,
-            rss_source_url: release.rssSourceUrl,
             ai_analysis: release.aiAnalysis,
             highlights: release.highlights,
           })
@@ -446,7 +413,7 @@ class AdminPressReleasesService extends PressReleasesService {
         console.log(`✅ Created release: ${release.title}`)
 
       } catch (error) {
-        console.error(`💥 Error processing release: ${release.title}`, error)
+        console.error(`❌ Error processing release: ${release.title}`, error)
       }
     }
 
@@ -468,10 +435,11 @@ class AdminPressReleasesService extends PressReleasesService {
           user_id: userId,
           company_id: data.companyId,
           poll_started_at: data.pollStartedAt,
+          poll_completed_at: data.pollCompletedAt,
           status: data.status,
-          releases_found: data.releasesFound || 0,
-          releases_new: data.releasesNew || 0,
-          releases_duplicate: data.releasesDuplicate || 0,
+          releases_found: data.releasesFound,
+          releases_new: data.releasesNew,
+          releases_duplicate: data.releasesDuplicate,
           error_message: data.errorMessage,
           error_details: data.errorDetails,
         })
@@ -495,22 +463,14 @@ class AdminPressReleasesService extends PressReleasesService {
    */
   async adminUpdatePollLog(
     logId: string,
-    updates: {
-      status: 'success' | 'error'
-      pollCompletedAt: string
-      releasesFound?: number
-      releasesNew?: number
-      releasesDuplicate?: number
-      errorMessage?: string
-      errorDetails?: any
-    }
+    updates: Partial<CreateRSSPollLog>
   ): Promise<RSSPollLog | null> {
     try {
-      const { data, error } = await supabaseAdmin
+      const { data: updatedLog, error } = await supabaseAdmin
         .from('rss_poll_logs')
         .update({
-          status: updates.status,
           poll_completed_at: updates.pollCompletedAt,
+          status: updates.status,
           releases_found: updates.releasesFound,
           releases_new: updates.releasesNew,
           releases_duplicate: updates.releasesDuplicate,
@@ -526,7 +486,7 @@ class AdminPressReleasesService extends PressReleasesService {
         return null
       }
 
-      return this.mapDbToPollLog(data)
+      return this.mapDbToPollLog(updatedLog)
     } catch (error) {
       console.error('Error in adminUpdatePollLog:', error)
       return null
@@ -534,6 +494,6 @@ class AdminPressReleasesService extends PressReleasesService {
   }
 }
 
-// Export singleton instances
+// Export instances
 export const pressReleasesService = new PressReleasesService()
-export const adminPressReleasesService = new AdminPressReleasesService() 
+export const adminPressReleasesService = new AdminPressReleasesService()

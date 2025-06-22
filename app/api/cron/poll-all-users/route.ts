@@ -40,12 +40,11 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Get all users who have companies (fixed for TEXT user_id)
+    // Get all users who have companies (UUID user_id)
     const { data: users, error: usersError } = await supabaseAdmin
       .from('companies')
       .select('user_id')
       .not('user_id', 'is', null)
-      .neq('user_id', '')
     
     if (usersError) {
       throw new Error(`Failed to get users: ${usersError.message}`)
