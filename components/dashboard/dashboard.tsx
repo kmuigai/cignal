@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Header } from "./header"
 import { ActivityFeed } from "./activity-feed"
 import { PressReleaseDetail } from "./press-release-detail"
-import { APIKeyWarningBanner } from "./api-key-warning-banner"
+import { APIKeyBannerWrapper } from "./api-key-warning-banner"
 import type { PressRelease } from "@/lib/types"
 import { CompanyManagementModal } from "./company-management-modal"
 import { useEnhancedPressReleases } from "@/hooks/use-enhanced-press-releases"
@@ -25,7 +25,11 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
   const [readReleases, setReadReleases] = useState<Set<string>>(new Set())
   const [bookmarkedReleases, setBookmarkedReleases] = useState<Set<string>>(new Set())
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [hasAPIKey, setHasAPIKey] = useState(false)
+  
+  // Tri-state API key management: null = loading, true = has key, false = no key
+  const [hasAPIKey, setHasAPIKey] = useState<boolean | null>(null)
+  const [apiKeyCheckError, setApiKeyCheckError] = useState<string | null>(null)
+  
   // Mobile state management
   const [mobileView, setMobileView] = useState<'feed' | 'detail'>('feed')
 
@@ -41,18 +45,43 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
     refresh,
   } = useEnhancedPressReleases(Array.isArray(companies) ? companies : [])
 
+  // Optimized API key check with caching and error handling
   useEffect(() => {
+    const checkAPIKeyStatus = async () => {
+      try {
+        // First check if we have a cached result
+        const cachedResult = claudeAPIKeyManager.getCachedAPIKeyStatus()
+        if (cachedResult !== null) {
+          setHasAPIKey(cachedResult)
+          setApiKeyCheckError(null)
+          return
+        }
+
+        // No cache available, perform async check
+        const hasKey = await claudeAPIKeyManager.hasAPIKey()
+        setHasAPIKey(hasKey)
+        setApiKeyCheckError(null)
+      } catch (error) {
+        console.error("Error checking API key status:", error)
+        setApiKeyCheckError(error instanceof Error ? error.message : "Failed to check API key")
+        // On error, assume no API key to be safe
+        setHasAPIKey(false)
+      }
+    }
+
     // Load read status and bookmarks
     setReadReleases(readStatusManager.getReadReleases())
     setBookmarkedReleases(bookmarkManager.getBookmarkedReleases())
 
-    // Check API key status
-    const checkAPIKey = async () => {
-      const hasKey = await claudeAPIKeyManager.hasAPIKey()
-      setHasAPIKey(hasKey)
-    }
-    checkAPIKey()
+    // Check API key status immediately
+    checkAPIKeyStatus()
   }, [])
+
+  // Handle API key changes from settings
+  const handleAPIKeyChange = (newHasAPIKey: boolean) => {
+    setHasAPIKey(newHasAPIKey)
+    setApiKeyCheckError(null)
+  }
 
   // Convert enhanced items to PressRelease format with safe array handling
   const pressReleases: PressRelease[] =
@@ -107,14 +136,28 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
   }
 
   const handleSignOut = () => {
-    // Clear API key on sign out for security
-    claudeAPIKeyManager.clearAPIKey()
+    // Clear API key and cache on sign out for security
+    claudeAPIKeyManager.invalidateCache()
     onSignOut()
   }
 
   // Mobile back to feed handler
   const handleBackToFeed = () => {
     setMobileView('feed')
+  }
+
+  // Calculate layout height considering banner state
+  const getLayoutHeight = () => {
+    if (hasAPIKey === null) {
+      // Loading state - reserve space for potential banner
+      return "h-[calc(100vh-8rem)]"
+    } else if (hasAPIKey === false) {
+      // No API key - banner is shown
+      return "h-[calc(100vh-8rem)]"
+    } else {
+      // Has API key - no banner
+      return "h-[calc(100vh-4rem)]"
+    }
   }
 
   // Show loading state while companies are loading
@@ -127,8 +170,11 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
           onOpenSettings={() => setSettingsOpen(true)}
           bookmarkCount={bookmarkedReleases.size}
         />
-        {!hasAPIKey && <APIKeyWarningBanner onOpenSettings={() => setSettingsOpen(true)} />}
-        <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+        <APIKeyBannerWrapper 
+          hasAPIKey={hasAPIKey} 
+          onOpenSettings={() => setSettingsOpen(true)} 
+        />
+        <div className={`flex ${getLayoutHeight()} items-center justify-center`}>
           <div className="text-center space-y-4">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
             <p className="text-muted-foreground">Loading dashboard...</p>
@@ -148,10 +194,16 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
           onOpenSettings={() => setSettingsOpen(true)}
           bookmarkCount={bookmarkedReleases.size}
         />
-        {!hasAPIKey && <APIKeyWarningBanner onOpenSettings={() => setSettingsOpen(true)} />}
-        <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+        <APIKeyBannerWrapper 
+          hasAPIKey={hasAPIKey} 
+          onOpenSettings={() => setSettingsOpen(true)} 
+        />
+        <div className={`flex ${getLayoutHeight()} items-center justify-center`}>
           <div className="text-center space-y-4">
             <p className="text-destructive">Error loading data: {companiesError || rssError}</p>
+            {apiKeyCheckError && (
+              <p className="text-sm text-muted-foreground">API Key check error: {apiKeyCheckError}</p>
+            )}
             <button
               onClick={refresh}
               className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90"
@@ -173,10 +225,13 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
         bookmarkCount={bookmarkedReleases.size}
       />
 
-      {!hasAPIKey && <APIKeyWarningBanner onOpenSettings={() => setSettingsOpen(true)} />}
+      <APIKeyBannerWrapper 
+        hasAPIKey={hasAPIKey} 
+        onOpenSettings={() => setSettingsOpen(true)} 
+      />
 
       {/* Responsive Layout Container */}
-      <div className={`flex flex-col lg:flex-row ${!hasAPIKey ? "h-[calc(100vh-8rem)]" : "h-[calc(100vh-4rem)]"}`}>
+      <div className={`flex flex-col lg:flex-row ${getLayoutHeight()}`}>
         {/* Left Panel - Activity Feed */}
         <div className={`
           w-full lg:w-2/5 
@@ -219,10 +274,12 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
           )}
         </div>
       </div>
+
+      {/* Settings Modal */}
       <CompanyManagementModal
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
-        onAPIKeyChange={setHasAPIKey}
+        onAPIKeyChange={handleAPIKeyChange}
         onCompaniesChange={() => {
           // Force refresh press releases when companies change
           console.log("🔄 Companies changed - refreshing press releases")

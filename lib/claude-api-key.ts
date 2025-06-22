@@ -1,6 +1,17 @@
 import { userProfileManager } from "./supabase/database"
 
+// Client-side cache for API key status
+interface APIKeyCache {
+  hasKey: boolean | null;
+  timestamp: number;
+  expiresIn: number; // milliseconds
+}
+
 class ClaudeAPIKeyManager {
+  private cache: APIKeyCache | null = null;
+  private readonly CACHE_DURATION = 30000; // 30 seconds
+  private checkingPromise: Promise<boolean> | null = null;
+
   /**
    * Store encrypted API key in Supabase
    */
@@ -14,6 +25,13 @@ class ClaudeAPIKeyManager {
       console.log("Attempting to store API key...")
       await userProfileManager.setClaudeAPIKey(apiKey.trim())
       console.log("API key stored successfully")
+      
+      // Update cache
+      this.cache = {
+        hasKey: true,
+        timestamp: Date.now(),
+        expiresIn: this.CACHE_DURATION
+      };
     } catch (error) {
       console.error("Error storing API key:", error)
       
@@ -47,22 +65,96 @@ class ClaudeAPIKeyManager {
   }
 
   /**
-   * Check if API key is configured
+   * Check if cache is valid
    */
-  async hasAPIKey(): Promise<boolean> {
-    const key = await this.getAPIKey()
-    return key !== null && key.length > 0
+  private isCacheValid(): boolean {
+    if (!this.cache) return false;
+    return Date.now() - this.cache.timestamp < this.cache.expiresIn;
   }
 
   /**
-   * Clear stored API key
+   * Get cached API key status if available and valid
+   */
+  getCachedAPIKeyStatus(): boolean | null {
+    if (this.isCacheValid() && this.cache) {
+      return this.cache.hasKey;
+    }
+    return null;
+  }
+
+  /**
+   * Check if API key is configured with caching and deduplication
+   */
+  async hasAPIKey(): Promise<boolean> {
+    // Return cached result if valid
+    const cachedResult = this.getCachedAPIKeyStatus();
+    if (cachedResult !== null) {
+      return cachedResult;
+    }
+
+    // If already checking, return the same promise to avoid duplicate requests
+    if (this.checkingPromise) {
+      return this.checkingPromise;
+    }
+
+    // Create new check promise
+    this.checkingPromise = this.performAPIKeyCheck();
+    
+    try {
+      const result = await this.checkingPromise;
+      return result;
+    } finally {
+      // Clear the promise after completion
+      this.checkingPromise = null;
+    }
+  }
+
+  /**
+   * Perform the actual API key check
+   */
+  private async performAPIKeyCheck(): Promise<boolean> {
+    try {
+      const key = await this.getAPIKey();
+      const hasKey = key !== null && key.length > 0;
+      
+      // Update cache
+      this.cache = {
+        hasKey,
+        timestamp: Date.now(),
+        expiresIn: this.CACHE_DURATION
+      };
+      
+      return hasKey;
+    } catch (error) {
+      console.error("Error checking API key:", error);
+      // Don't cache errors, return false
+      return false;
+    }
+  }
+
+  /**
+   * Clear stored API key and cache
    */
   async clearAPIKey(): Promise<void> {
     try {
       await userProfileManager.clearClaudeAPIKey()
+      // Clear cache
+      this.cache = {
+        hasKey: false,
+        timestamp: Date.now(),
+        expiresIn: this.CACHE_DURATION
+      };
     } catch (error) {
       console.error("Error clearing API key:", error)
     }
+  }
+
+  /**
+   * Invalidate cache (useful when user signs out)
+   */
+  invalidateCache(): void {
+    this.cache = null;
+    this.checkingPromise = null;
   }
 
   /**
