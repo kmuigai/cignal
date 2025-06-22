@@ -11,7 +11,6 @@ import { Pencil, Trash2, Plus } from "lucide-react"
 import type { Company } from "@/lib/types"
 import { useCompanies } from "@/hooks/use-companies"
 import { AIConfigurationSection } from "./ai-configuration-section"
-import { AIPromptsSection } from "./ai-prompts-section"
 
 interface CompanyManagementModalProps {
   open: boolean
@@ -25,8 +24,8 @@ export function CompanyManagementModal({ open, onOpenChange, onAPIKeyChange, onC
   const [editingId, setEditingId] = useState<string | null>(null)
   const [addingNew, setAddingNew] = useState(false)
   const [editForm, setEditForm] = useState({ name: "", variations: "" })
-  const [error, setError] = useState("")
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState("")
 
   const handleEdit = (company: Company) => {
     setEditingId(company.id)
@@ -39,10 +38,6 @@ export function CompanyManagementModal({ open, onOpenChange, onAPIKeyChange, onC
   }
 
   const handleAddNew = () => {
-    if (companies.length >= 5) {
-      setError("Maximum 5 companies allowed")
-      return
-    }
     setAddingNew(true)
     setEditingId(null)
     setEditForm({ name: "", variations: "" })
@@ -123,17 +118,6 @@ export function CompanyManagementModal({ open, onOpenChange, onAPIKeyChange, onC
           {/* AI Configuration Section */}
           <div>
             <AIConfigurationSection onAPIKeyChange={onAPIKeyChange} />
-          </div>
-
-          <Separator />
-
-          {/* AI Prompts Section */}
-          <div>
-            <AIPromptsSection
-              onPromptsChange={() => {
-                console.log("AI prompts updated")
-              }}
-            />
           </div>
 
           <Separator />

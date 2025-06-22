@@ -48,121 +48,9 @@ Please respond in this exact JSON format:
 Important: Only include highlights for text that actually appears in the press release content. Be precise with the text matching.`,
 }
 
-class AIPromptsManager {
-  private readonly STORAGE_KEY = "cignal-ai-prompts"
-
-  /**
-   * Get current AI prompts (custom or defaults)
-   */
-  getPrompts(): AIPrompts {
-    if (typeof window === "undefined") {
-      return DEFAULT_AI_PROMPTS
-    }
-
-    try {
-      const stored = localStorage.getItem(this.STORAGE_KEY)
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        // Ensure both prompts exist, fallback to defaults if missing
-        return {
-          systemPrompt: parsed.systemPrompt || DEFAULT_AI_PROMPTS.systemPrompt,
-          userPromptTemplate: parsed.userPromptTemplate || DEFAULT_AI_PROMPTS.userPromptTemplate,
-        }
-      }
-    } catch (error) {
-      console.error("Error loading AI prompts:", error)
-    }
-
-    return DEFAULT_AI_PROMPTS
-  }
-
-  /**
-   * Save custom AI prompts
-   */
-  savePrompts(prompts: AIPrompts): void {
-    if (typeof window === "undefined") return
-
-    try {
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(prompts))
-    } catch (error) {
-      console.error("Error saving AI prompts:", error)
-      throw new Error("Failed to save AI prompts")
-    }
-  }
-
-  /**
-   * Reset to default prompts
-   */
-  resetToDefaults(): void {
-    if (typeof window === "undefined") return
-
-    try {
-      localStorage.removeItem(this.STORAGE_KEY)
-    } catch (error) {
-      console.error("Error resetting AI prompts:", error)
-    }
-  }
-
-  /**
-   * Check if prompts are customized
-   */
-  isCustomized(): boolean {
-    const current = this.getPrompts()
-    return (
-      current.systemPrompt !== DEFAULT_AI_PROMPTS.systemPrompt ||
-      current.userPromptTemplate !== DEFAULT_AI_PROMPTS.userPromptTemplate
-    )
-  }
-
-  /**
-   * Process template variables in user prompt
-   */
-  processTemplate(
-    template: string,
-    variables: {
-      companyName?: string
-      content: string
-      title: string
-      date?: string
-    },
-  ): string {
-    let processed = template
-
-    // Replace template variables
-    processed = processed.replace(
-      /\{\{COMPANY_NAME\s*\?\s*"([^"]*?)"\s*\+\s*COMPANY_NAME\s*:\s*"([^"]*?)"\}\}/g,
-      variables.companyName ? `$1${variables.companyName}` : "$2",
-    )
-
-    processed = processed.replace(
-      /\{\{DATE\s*\?\s*"([^"]*?)"\s*\+\s*DATE\s*:\s*"([^"]*?)"\}\}/g,
-      variables.date ? `$1${variables.date}` : "$2",
-    )
-
-    processed = processed.replace(/\{\{COMPANY_NAME\}\}/g, variables.companyName || "")
-    processed = processed.replace(/\{\{CONTENT\}\}/g, variables.content)
-    processed = processed.replace(/\{\{TITLE\}\}/g, variables.title)
-    processed = processed.replace(/\{\{DATE\}\}/g, variables.date || "")
-
-    return processed
-  }
-}
-
-export const aiPromptsManager = new AIPromptsManager()
-
-// Export convenience functions for backward compatibility
-export function getCustomPrompts(): AIPrompts {
-  return aiPromptsManager.getPrompts()
-}
-
-export function saveCustomPrompts(prompts: AIPrompts): void {
-  aiPromptsManager.savePrompts(prompts)
-}
-
-export function resetToDefaultPrompts(): void {
-  aiPromptsManager.resetToDefaults()
-}
-
+/**
+ * Process prompt template with variables
+ */
 export function processPromptTemplate(
   template: string,
   variables: {
@@ -172,14 +60,23 @@ export function processPromptTemplate(
     date?: string
   },
 ): string {
-  return aiPromptsManager.processTemplate(template, variables)
+  let processed = template
+
+  // Replace template variables
+  processed = processed.replace(/\{\{COMPANY_NAME\s*\?\s*"([^"]*?)"\s*\+\s*COMPANY_NAME\s*:\s*"([^"]*?)"\}\}/g, 
+    variables.companyName ? `$1${variables.companyName}` : '$2')
+  
+  processed = processed.replace(/\{\{DATE\s*\?\s*"([^"]*?)"\s*\+\s*DATE\s*:\s*"([^"]*?)"\}\}/g, 
+    variables.date ? `$1${variables.date}` : '$2')
+  
+  processed = processed.replace(/\{\{CONTENT\}\}/g, variables.content)
+  processed = processed.replace(/\{\{TITLE\}\}/g, variables.title)
+  processed = processed.replace(/\{\{COMPANY_NAME\}\}/g, variables.companyName || '')
+  processed = processed.replace(/\{\{DATE\}\}/g, variables.date || '')
+
+  return processed
 }
 
 // Legacy exports for compatibility
 export const DEFAULT_SYSTEM_PROMPT = DEFAULT_AI_PROMPTS.systemPrompt
 export const DEFAULT_USER_PROMPT = DEFAULT_AI_PROMPTS.userPromptTemplate
-
-export interface CustomPrompts {
-  systemPrompt: string
-  userPrompt: string
-}

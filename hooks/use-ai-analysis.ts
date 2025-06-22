@@ -1,17 +1,15 @@
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
-import { getCustomPrompts } from "@/lib/ai-prompts"
-import { aiAnalysisCache } from "@/lib/ai-analysis-cache"
+import { DEFAULT_AI_PROMPTS } from "@/lib/ai-prompts"
 
-interface AnalysisResult {
+export interface AnalysisResult {
   summary: string
   keyPoints: string[]
   highlights: Array<{
     type: "financial" | "opportunity" | "risk" | "strategic"
     text: string
-    start: number
-    end: number
+    reasoning: string
   }>
   usage?: {
     inputTokens: number
@@ -44,8 +42,8 @@ export function useAIAnalysisLegacy(): UseAIAnalysisReturn {
           throw new Error("Please configure your Claude API key in Settings → AI Configuration")
         }
 
-        // Get custom prompts
-        const customPrompts = getCustomPrompts()
+        // Use default prompts
+        const customPrompts = DEFAULT_AI_PROMPTS
 
         const response = await fetch("/api/analyze-release", {
           method: "POST",
@@ -101,41 +99,95 @@ interface UseAutoAIAnalysisReturn {
   analysis: AnalysisResult | null
   loading: boolean
   error: string | null
-  retry: () => void
+  performAnalysis: (forceRefresh?: boolean) => Promise<void>
+  checkAPIKey: () => Promise<boolean>
   fromCache: boolean
-  cacheAge?: string
+  cacheAge: string | null
 }
 
+// Simple in-memory cache for AI analysis results
+class AIAnalysisCache {
+  private cache = new Map<string, { result: AnalysisResult; timestamp: number }>()
+  private readonly CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+
+  private getCacheKey(title: string, content: string): string {
+    // Create a simple hash of title + content for cache key
+    return `${title.slice(0, 50)}-${content.slice(0, 100)}`.replace(/[^a-zA-Z0-9]/g, "")
+  }
+
+  getCachedAnalysis(title: string, content: string): { result: AnalysisResult; age: string } | null {
+    const key = this.getCacheKey(title, content)
+    const cached = this.cache.get(key)
+
+    if (!cached) return null
+
+    const now = Date.now()
+    const age = now - cached.timestamp
+
+    // Check if cache is still valid
+    if (age > this.CACHE_DURATION) {
+      this.cache.delete(key)
+      return null
+    }
+
+    // Format age string
+    const ageMinutes = Math.floor(age / (1000 * 60))
+    const ageString = ageMinutes === 0 ? "just now" : `${ageMinutes} minute${ageMinutes === 1 ? "" : "s"} ago`
+
+    return {
+      result: cached.result,
+      age: ageString,
+    }
+  }
+
+  setCachedAnalysis(title: string, content: string, result: AnalysisResult): void {
+    const key = this.getCacheKey(title, content)
+    this.cache.set(key, {
+      result,
+      timestamp: Date.now(),
+    })
+
+    // Clean up old entries (keep only last 10)
+    if (this.cache.size > 10) {
+      const entries = Array.from(this.cache.entries())
+      entries.sort((a, b) => b[1].timestamp - a[1].timestamp)
+      this.cache.clear()
+      entries.slice(0, 10).forEach(([k, v]) => this.cache.set(k, v))
+    }
+  }
+
+  clearCache(): void {
+    this.cache.clear()
+  }
+}
+
+const aiAnalysisCache = new AIAnalysisCache()
+
+/**
+ * Hook for AI analysis with caching and error handling
+ */
 export function useAIAnalysis(title: string, content: string): UseAutoAIAnalysisReturn {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fromCache, setFromCache] = useState(false)
-  const [cacheAge, setCacheAge] = useState<string>()
-  const [hasAPIKey, setHasAPIKey] = useState<boolean | null>(null)
+  const [cacheAge, setCacheAge] = useState<string | null>(null)
 
-  // Check API key availability
-  const checkAPIKey = useCallback(async () => {
+  const checkAPIKey = useCallback(async (): Promise<boolean> => {
     try {
       const { claudeAPIKeyManager } = await import("@/lib/claude-api-key")
-      const apiKey = await claudeAPIKeyManager.getAPIKey()
-      setHasAPIKey(!!apiKey)
-      return !!apiKey
-    } catch {
-      setHasAPIKey(false)
+      const hasKey = await claudeAPIKeyManager.hasAPIKey()
+      return hasKey
+    } catch (error) {
+      console.error("Error checking API key:", error)
       return false
     }
   }, [])
 
   const performAnalysis = useCallback(
     async (forceRefresh = false) => {
-      if (!title || !content) return
-
-      // Check API key first
-      const hasKey = await checkAPIKey()
-      if (!hasKey) {
-        setError("Configure your Claude API key in Settings → AI Configuration to enable AI analysis")
-        setLoading(false)
+      if (!title.trim() || !content.trim()) {
+        setError("Title and content are required for analysis")
         return
       }
 
@@ -143,30 +195,12 @@ export function useAIAnalysis(title: string, content: string): UseAutoAIAnalysis
       if (!forceRefresh) {
         const cached = aiAnalysisCache.getCachedAnalysis(title, content)
         if (cached) {
-          setAnalysis({
-            summary: cached.summary,
-            keyPoints: cached.keyPoints,
-            highlights: cached.highlights,
-            usage: cached.usage,
-          })
+          setAnalysis(cached.result)
           setFromCache(true)
+          setCacheAge(cached.age)
           setError(null)
           setLoading(false)
-
-          // Calculate cache age
-          const analysisDate = new Date(cached.analyzedAt)
-          const now = new Date()
-          const diffHours = Math.floor((now.getTime() - analysisDate.getTime()) / (1000 * 60 * 60))
-          
-          if (diffHours < 1) {
-            setCacheAge("Just now")
-          } else if (diffHours < 24) {
-            setCacheAge(`${diffHours}h ago`)
-          } else {
-            const diffDays = Math.floor(diffHours / 24)
-            setCacheAge(`${diffDays}d ago`)
-          }
-          
+          console.log(`📋 Using cached AI analysis (${cached.age})`)
           return
         }
       }
@@ -174,10 +208,18 @@ export function useAIAnalysis(title: string, content: string): UseAutoAIAnalysis
       setLoading(true)
       setError(null)
       setFromCache(false)
-      setCacheAge(undefined)
+      setCacheAge(null)
 
       try {
-        // Get API key (we already checked it exists)
+        // Check API key first
+        const hasAPIKey = await checkAPIKey()
+        if (!hasAPIKey) {
+          throw new Error("Configure your Claude API key in Settings → AI Configuration to enable AI analysis")
+        }
+
+        console.log("🔍 API Key check passed")
+
+        // Get the API key
         const { claudeAPIKeyManager } = await import("@/lib/claude-api-key")
         const apiKey = await claudeAPIKeyManager.getAPIKey()
 
@@ -187,9 +229,6 @@ export function useAIAnalysis(title: string, content: string): UseAutoAIAnalysis
 
         console.log("🔍 Retrieved API Key (first 20 chars):", apiKey.substring(0, 20))
         console.log("🔍 Retrieved API Key length:", apiKey.length)
-
-        // Get custom prompts
-        const customPrompts = getCustomPrompts()
 
         console.log(`🤖 Starting AI analysis for: ${title.substring(0, 50)}...`)
 
@@ -202,7 +241,7 @@ export function useAIAnalysis(title: string, content: string): UseAutoAIAnalysis
             content,
             title,
             apiKey,
-            customPrompts,
+            customPrompts: DEFAULT_AI_PROMPTS,
           }),
         })
 
@@ -240,27 +279,23 @@ export function useAIAnalysis(title: string, content: string): UseAutoAIAnalysis
     [title, content, checkAPIKey],
   )
 
-  // Check API key and auto-start analysis when title/content changes
+  // Auto-analyze when title or content changes (with debouncing)
   useEffect(() => {
-    const initializeAnalysis = async () => {
-      const hasKey = await checkAPIKey()
-      if (hasKey) {
-        performAnalysis()
-      }
-    }
-    
-    initializeAnalysis()
-  }, [performAnalysis, checkAPIKey])
+    if (!title.trim() || !content.trim()) return
 
-  const retry = useCallback(() => {
-    performAnalysis(true) // Force refresh
-  }, [performAnalysis])
+    const timeoutId = setTimeout(() => {
+      performAnalysis()
+    }, 1000) // 1 second debounce
+
+    return () => clearTimeout(timeoutId)
+  }, [title, content, performAnalysis])
 
   return {
     analysis,
     loading,
     error,
-    retry,
+    performAnalysis,
+    checkAPIKey,
     fromCache,
     cacheAge,
   }
