@@ -20,6 +20,16 @@ export const RSS_SOURCES: Record<string, RSSSource> = {
       },
     ],
   },
+  reuters: {
+    name: "Reuters (via Google News)",
+    feeds: [
+      {
+        type: "financial",
+        url: "https://news.google.com/rss/search?q=site%3Areuters.com&hl=en-US&gl=US&ceid=US%3Aen",
+        displayName: "Reuters Financial News",
+      },
+    ],
+  },
 }
 
 // Helper function to get all feeds for specific companies
@@ -29,6 +39,11 @@ export function getFeedsForCompanies(companyNames: string[]): Array<RSSFeed & { 
   // Always include general feeds
   RSS_SOURCES.general.feeds.forEach((feed) => {
     feeds.push({ ...feed, sourceName: "general" })
+  })
+
+  // Include Reuters financial news
+  RSS_SOURCES.reuters.feeds.forEach((feed) => {
+    feeds.push({ ...feed, sourceName: "reuters" })
   })
 
   // Note: Company-specific IR feeds have been temporarily removed due to 404 errors
