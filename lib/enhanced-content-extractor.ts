@@ -17,8 +17,7 @@ interface ContentExtractionResult {
     total: number
     extraction: number
   }
-  isGoogleNewsFallback?: boolean
-  originalGoogleNewsUrl?: string
+
 }
 
 interface ExtractionOptions {
@@ -187,10 +186,7 @@ export async function extractContentFromUrl(
   try {
     console.log(`🔍 Extracting content from: ${url.substring(0, 100)}...`)
 
-    // Check if this is a Google News URL that we couldn't resolve
-    if (isGoogleNewsUrl(url)) {
-      return handleUnresolvedGoogleNewsUrl(url)
-    }
+    
 
     // Determine source and get appropriate extractor
     const source = detectNewsSource(url)
@@ -252,64 +248,12 @@ export async function extractContentFromUrl(
   }
 }
 
-/**
- * Handle Google News URLs that couldn't be resolved to actual article URLs
- */
-function handleUnresolvedGoogleNewsUrl(googleNewsUrl: string): ContentExtractionResult {
-  console.log(`🔄 Handling unresolved Google News URL: ${googleNewsUrl.substring(0, 100)}...`)
 
-  // Extract source hint from the URL
-  const sourceHint = extractSourceHintFromGoogleNewsUrl(googleNewsUrl)
-  const sourceName = sourceHint || 'Google News'
-
-  // Create a helpful message for the user
-  const content = `
-    <div class="google-news-fallback">
-      <div class="google-news-header">
-        <h3>📰 Article from ${sourceName}</h3>
-        <p class="google-news-notice">
-          This article is hosted on Google News. Click the link below to read the full article on the original website.
-        </p>
-      </div>
-      
-      <div class="google-news-actions">
-        <a href="${googleNewsUrl}" target="_blank" rel="noopener noreferrer" class="google-news-link">
-          🔗 Read Full Article on ${sourceName}
-        </a>
-      </div>
-      
-      <div class="google-news-info">
-        <p><strong>Why am I seeing this?</strong></p>
-        <p>Google News uses special URLs that require JavaScript to redirect to the actual article. 
-           For the best reading experience, please click the link above to view the article on the original website.</p>
-      </div>
-    </div>
-  `.trim()
-
-  return {
-    success: true,
-    content,
-    htmlContent: content,
-    textContent: `Article from ${sourceName}\n\nThis article is hosted on Google News. Please visit the original website to read the full content.\n\nURL: ${googleNewsUrl}`,
-    extractedBy: 'google-news-fallback',
-    confidence: 50, // Lower confidence since we couldn't get the actual content
-    isGoogleNewsFallback: true,
-    originalGoogleNewsUrl: googleNewsUrl,
-  }
-}
 
 /**
- * Check if URL is a Google News URL
+ * Extract source hint from URL
  */
-function isGoogleNewsUrl(url: string): boolean {
-  return url.includes('news.google.com/rss/articles/') || 
-         url.includes('news.google.com/articles/')
-}
-
-/**
- * Extract source hint from Google News URL
- */
-function extractSourceHintFromGoogleNewsUrl(url: string): string | null {
+function extractSourceHintFromUrl(url: string): string | null {
   try {
     const urlObj = new URL(url)
     

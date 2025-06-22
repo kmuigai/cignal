@@ -13,8 +13,6 @@ interface RSSItem {
   feedSource: string
   feedType: "ir-news" | "sec-filings" | "all-news" | "financial"
   sourceName: string
-  isGoogleNews?: boolean
-  requiresRedirectResolution?: boolean
 }
 
 interface FeedResult {
@@ -181,9 +179,7 @@ function parseRSSXML(xmlText: string, feedSource: string, feedType: string, sour
         // Extract company mentions from title and description
         const companyMentions = extractCompanyMentions(fullText)
 
-        // Check if this is a Google News URL
-        const isGoogleNewsLink = link.includes('news.google.com/rss/articles/') || 
-                                link.includes('news.google.com/articles/')
+
 
         // Clean HTML from description for better processing
         const cleanDescription = description.replace(/<[^>]*>/g, '').trim()
@@ -197,12 +193,7 @@ function parseRSSXML(xmlText: string, feedSource: string, feedType: string, sour
           companyMentions,
           feedSource,
           feedType: feedType as "ir-news" | "sec-filings" | "all-news" | "financial",
-          sourceName,
-          // Add metadata for Google News links
-          ...(isGoogleNewsLink && {
-            isGoogleNews: true,
-            requiresRedirectResolution: true
-          })
+          sourceName
         }
 
         items.push(item)

@@ -22,35 +22,7 @@ export function PressReleaseDetail({ release, company, isBookmarked, onToggleBoo
   // Extract full content from the source URL
   const { data: extractionResult, loading: extractionLoading } = useContentExtraction(release.sourceUrl)
 
-  // Debug logging to see what's happening
-  console.log('🔍 PressReleaseDetail Debug:', {
-    sourceUrl: release.sourceUrl,
-    isGoogleNews: release.sourceUrl?.includes('news.google.com'),
-    extractionLoading,
-    extractionResult: extractionResult ? {
-      success: extractionResult.success,
-      contentLength: extractionResult.content?.length || 0,
-      extractedBy: extractionResult.extractedBy,
-      hasHtmlContent: !!extractionResult.htmlContent,
-      hasTextContent: !!extractionResult.textContent
-    } : null
-  })
 
-  // Fallback: Check if the content contains Google News URLs and we haven't extracted properly
-  const hasGoogleNewsInContent = release.content?.includes('news.google.com/rss/articles/') || 
-                                 release.content?.includes('news.google.com/articles/')
-  const isGoogleNewsUrl = release.sourceUrl?.includes('news.google.com')
-  const needsGoogleNewsExtraction = isGoogleNewsUrl && 
-                                   !extractionLoading && 
-                                   (!extractionResult || !extractionResult.success || 
-                                    extractionResult.content?.length < 1000)
-
-  console.log('🔍 Google News Fallback Check:', {
-    hasGoogleNewsInContent,
-    isGoogleNewsUrl,
-    needsGoogleNewsExtraction,
-    currentContentLength: extractionResult?.content?.length || 0
-  })
 
   // AI Summary collapse state management (desktop-only)
   const { isCollapsed, toggle: toggleAICollapse, isLoaded: aiCollapseLoaded } = useAISummaryCollapse()
@@ -117,44 +89,7 @@ export function PressReleaseDetail({ release, company, isBookmarked, onToggleBoo
       )
     }
 
-    // Special handling for Google News URLs that need extraction
-    if (needsGoogleNewsExtraction) {
-      return (
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-6 space-y-4">
-          <div className="flex items-start gap-3">
-            <div className="text-blue-600 dark:text-blue-400 text-2xl">📰</div>
-            <div className="space-y-2">
-              <h3 className="font-semibold text-blue-900 dark:text-blue-100">
-                Google News Article Detected
-              </h3>
-              <p className="text-blue-800 dark:text-blue-200 text-sm">
-                This article is from Google News and requires special processing to extract the full content.
-              </p>
-            </div>
-          </div>
-          
-          <div className="flex gap-3">
-            <button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
-            >
-              🔄 Extract Full Article
-            </button>
-            <button
-              onClick={() => window.open(release.sourceUrl, "_blank")}
-              className="px-4 py-2 border border-blue-300 text-blue-700 dark:text-blue-300 rounded-md text-sm font-medium hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
-            >
-              🔗 Open Original Article
-            </button>
-          </div>
-          
-          <div className="text-xs text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/40 p-3 rounded">
-            <strong>Technical Note:</strong> Google News uses special redirect URLs that require additional processing. 
-            The extraction system will resolve the actual article URL and fetch the full content.
-          </div>
-        </div>
-      )
-    }
+
 
     if (!contentInfo.hasContent) {
       // Fallback to RSS content as text
