@@ -147,6 +147,81 @@
   .dark .article-content a {
     @apply text-primary hover:text-primary/80;
   }
+
+  /* Mobile-specific badge enhancements */
+  .mobile-badge-container {
+    @apply flex items-center gap-2 min-w-0 flex-1 overflow-visible;
+  }
+  
+  .mobile-optimized-badge {
+    @apply text-xs font-medium shrink-0 transition-colors duration-200;
+    @apply px-2.5 py-1 min-w-fit max-w-[140px] sm:max-w-none;
+    @apply truncate bg-secondary/90 hover:bg-secondary;
+    @apply border border-border/50 leading-none;
+    /* Ensure badge is always visible on mobile */
+    min-height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  /* Mobile press release card optimizations */
+  .mobile-press-release-card {
+    @apply p-4 rounded-lg border cursor-pointer;
+    @apply transition-all duration-200 hover:bg-accent/50 active:bg-accent/70;
+    @apply hover:shadow-sm touch-manipulation;
+    /* Prevent layout shift on mobile */
+    contain: layout style paint;
+  }
+  
+  /* Mobile header layout fixes */
+  .mobile-press-release-header {
+    @apply flex items-start justify-between mb-3 gap-3;
+    min-height: 28px;
+    /* Ensure proper spacing and prevent overlap */
+    align-items: flex-start;
+  }
+  
+  /* Mobile timestamp optimizations */
+  .mobile-timestamp {
+    @apply text-xs text-muted-foreground shrink-0 min-w-fit leading-none;
+    /* Ensure timestamp never wraps or gets hidden */
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+}
+
+/* Mobile-specific utility classes */
+@layer utilities {
+  /* Force visibility on mobile */
+  .mobile-force-visible {
+    visibility: visible !important;
+    opacity: 1 !important;
+    display: flex !important;
+  }
+  
+  /* Mobile touch optimizations */
+  .mobile-touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Mobile container fixes */
+  .mobile-container-fix {
+    overflow: visible;
+    contain: none;
+  }
+  
+  /* Mobile debugging (remove in production) */
+  .mobile-debug {
+    @apply border-2 border-red-500 bg-red-100/20;
+  }
+  
+  /* Ensure proper mobile layout */
+  .mobile-layout-fix {
+    @apply w-full overflow-visible;
+    contain: layout;
+  }
 }
 
 .font-bricolage {
@@ -158,4 +233,38 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* Mobile-specific media queries for enhanced performance */
+@media (max-width: 640px) {
+  /* Ensure badges are always visible on small screens */
+  .mobile-optimized-badge {
+    max-width: 120px;
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+  }
+  
+  /* Improve mobile card spacing */
+  .mobile-press-release-card {
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+  }
+  
+  /* Mobile header improvements */
+  .mobile-press-release-header {
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+}
+
+/* Very small screens (iPhone SE, etc.) */
+@media (max-width: 375px) {
+  .mobile-optimized-badge {
+    max-width: 100px;
+    font-size: 0.7rem;
+  }
+  
+  .mobile-press-release-header {
+    gap: 0.5rem;
+  }
 }

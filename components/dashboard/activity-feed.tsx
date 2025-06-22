@@ -79,9 +79,9 @@ export function ActivityFeed({
   }
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="flex flex-col h-full bg-background mobile-layout-fix">
       {/* Filter Tabs */}
-      <div className="p-3 sm:p-4 border-b border-border">
+      <div className="p-4 sm:p-4 border-b border-border">
         {/* Company Filter Buttons - Horizontal scroll on mobile */}
         <div className="mb-3">
           <ScrollArea className="w-full">
@@ -92,7 +92,7 @@ export function ActivityFeed({
                   variant={selectedCompany === company ? "default" : "outline"}
                   size="sm"
                   onClick={() => onCompanyChange(company)}
-                  className="text-xs shrink-0"
+                  className="text-xs shrink-0 min-w-fit px-3 mobile-touch-target"
                 >
                   {company}
                 </Button>
@@ -109,7 +109,7 @@ export function ActivityFeed({
             size="sm"
             onClick={onRefresh}
             disabled={refreshing}
-            className="h-6 w-6 p-0 shrink-0 ml-2"
+            className="h-6 w-6 p-0 shrink-0 ml-2 mobile-touch-target"
             title="Refresh data"
           >
             <RefreshCw className={cn("h-3 w-3", refreshing && "animate-spin")} />
@@ -119,7 +119,7 @@ export function ActivityFeed({
 
       {/* Press Release List */}
       <ScrollArea className="flex-1">
-        <div className="p-3 sm:p-4 space-y-3">
+        <div className="p-4 sm:p-4 space-y-4 mobile-container-fix">
           {safeReleases.map((release) => {
             const company = safeCompanies.find((c) => c.id === release.companyId)
             const isSelected = selectedReleaseId === release.id
@@ -129,27 +129,39 @@ export function ActivityFeed({
               <div
                 key={release.id}
                 className={cn(
-                  "p-3 sm:p-4 rounded-lg border cursor-pointer transition-colors hover:bg-accent/50 active:bg-accent/70",
-                  isSelected && "bg-accent border-accent-foreground/20",
+                  "mobile-press-release-card",
+                  isSelected && "bg-accent border-accent-foreground/20 shadow-sm",
                 )}
                 onClick={() => onReleaseSelect(release)}
               >
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <Badge variant="secondary" className="text-xs shrink-0">
+                {/* Mobile-optimized header with improved spacing */}
+                <div className="mobile-press-release-header">
+                  {/* Left side - Badge and unread indicator */}
+                  <div className="mobile-badge-container mobile-force-visible">
+                    <Badge 
+                      variant="secondary" 
+                      className="mobile-optimized-badge"
+                      title={company?.name || "Unknown Company"} // Accessibility tooltip
+                    >
                       {company?.name || "Unknown Company"}
                     </Badge>
-                    {isUnread && <div className="w-2 h-2 bg-primary rounded-full shrink-0"></div>}
+                    {isUnread && (
+                      <div className="w-2 h-2 bg-primary rounded-full shrink-0 animate-pulse mobile-force-visible"></div>
+                    )}
                   </div>
-                  <span className="text-xs text-muted-foreground shrink-0 ml-2">
+                  
+                  {/* Right side - Timestamp */}
+                  <span className="mobile-timestamp">
                     {formatRelativeTime(release.publishedAt)}
                   </span>
                 </div>
 
-                <h3 className="font-medium text-sm mb-2 line-clamp-2 leading-relaxed">
+                {/* Title with improved mobile spacing */}
+                <h3 className="font-medium text-sm mb-3 line-clamp-2 leading-relaxed text-foreground">
                   {release.title}
                 </h3>
 
+                {/* Summary with improved mobile readability */}
                 <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
                   {cleanHtmlTags(release.summary)}
                 </p>
@@ -158,9 +170,9 @@ export function ActivityFeed({
           })}
 
           {safeReleases.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              <p className="text-sm">No press releases found</p>
-              <p className="text-xs mt-1">Try adjusting your company filters or refresh the data</p>
+            <div className="text-center py-12 text-muted-foreground">
+              <p className="text-sm mb-2">No press releases found</p>
+              <p className="text-xs">Try adjusting your company filters or refresh the data</p>
             </div>
           )}
         </div>
