@@ -22,6 +22,20 @@ export function PressReleaseDetail({ release, company, isBookmarked, onToggleBoo
   // Extract full content from the source URL
   const { data: extractionResult, loading: extractionLoading } = useContentExtraction(release.sourceUrl)
 
+  // Debug logging to see what's happening
+  console.log('🔍 PressReleaseDetail Debug:', {
+    sourceUrl: release.sourceUrl,
+    isGoogleNews: release.sourceUrl?.includes('news.google.com'),
+    extractionLoading,
+    extractionResult: extractionResult ? {
+      success: extractionResult.success,
+      contentLength: extractionResult.content?.length || 0,
+      extractedBy: extractionResult.extractedBy,
+      hasHtmlContent: !!extractionResult.htmlContent,
+      hasTextContent: !!extractionResult.textContent
+    } : null
+  })
+
   // AI Summary collapse state management (desktop-only)
   const { isCollapsed, toggle: toggleAICollapse, isLoaded: aiCollapseLoaded } = useAISummaryCollapse()
 
