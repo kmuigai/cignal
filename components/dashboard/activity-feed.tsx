@@ -7,8 +7,6 @@ import { cn } from "@/lib/utils"
 import type { PressRelease, Company } from "@/lib/types"
 import { formatRelativeTime } from "@/lib/date-utils"
 import { RefreshCw } from "lucide-react"
-import { MobileCompanyCarousel } from "./mobile-company-carousel"
-import { useIsMobile } from "@/hooks/use-mobile"
 
 const cleanHtmlTags = (text: string): string => {
   return text.replace(/<[^>]*>/g, "").trim()
@@ -43,7 +41,6 @@ export function ActivityFeed({
   const safeCompanies = Array.isArray(companies) ? companies : []
   const safeReleases = Array.isArray(releases) ? releases : []
   const safeReadReleases = readReleases instanceof Set ? readReleases : new Set()
-  const isMobile = useIsMobile()
 
   const companyOptions = ["All", ...safeCompanies.map((c) => c.name)]
 
@@ -85,36 +82,23 @@ export function ActivityFeed({
     <div className="flex flex-col h-full bg-background mobile-layout-fix">
       {/* Filter Tabs */}
       <div className="p-4 sm:p-4 border-b border-border">
-        {/* Company Filter - Responsive between mobile carousel and desktop scroll */}
+        {/* Company Filter Buttons - Horizontal scroll on mobile */}
         <div className="mb-3">
-          {isMobile ? (
-            // Mobile: Swipeable carousel
-            <MobileCompanyCarousel
-              companies={companyOptions}
-              selectedCompany={selectedCompany}
-              onCompanyChange={onCompanyChange}
-              releases={safeReleases}
-              companiesData={safeCompanies}
-              className="w-full"
-            />
-          ) : (
-            // Desktop: Horizontal scroll area
-            <ScrollArea className="w-full">
-              <div className="flex gap-2 pb-2 min-w-max">
-                {companyOptions.map((company) => (
-                  <Button
-                    key={company}
-                    variant={selectedCompany === company ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => onCompanyChange(company)}
-                    className="text-xs shrink-0 min-w-fit px-3"
-                  >
-                    {company}
-                  </Button>
-                ))}
-              </div>
-            </ScrollArea>
-          )}
+          <ScrollArea className="w-full">
+            <div className="flex gap-2 pb-2 min-w-max">
+              {companyOptions.map((company) => (
+                <Button
+                  key={company}
+                  variant={selectedCompany === company ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => onCompanyChange(company)}
+                  className="text-xs shrink-0 min-w-fit px-3 mobile-touch-target"
+                >
+                  {company}
+                </Button>
+              ))}
+            </div>
+          </ScrollArea>
         </div>
 
         {/* Last Updated and Refresh */}
