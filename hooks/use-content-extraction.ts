@@ -7,6 +7,8 @@ interface ContentExtractionResult {
   content: string
   htmlContent?: string
   textContent?: string
+  extractedBy?: string
+  confidence?: number
   error?: string
 }
 
@@ -28,14 +30,45 @@ export function useContentExtraction(url: string | null) {
       setError(null)
 
       try {
-        const response = await fetch(`/api/extract-content?url=${encodeURIComponent(url)}`)
+        // Determine which API endpoint to use based on URL type
+        const isGoogleNews = url.includes('news.google.com/rss/articles/') || 
+                            url.includes('news.google.com/articles/')
+        
+        const apiEndpoint = isGoogleNews 
+          ? '/api/extract-google-news-content'
+          : '/api/extract-content'
+
+        console.log(`🔍 Using ${isGoogleNews ? 'Google News' : 'standard'} extraction for: ${url.substring(0, 100)}...`)
+
+        const response = await fetch(`${apiEndpoint}?url=${encodeURIComponent(url)}`)
         const result = await response.json()
 
         if (!response.ok) {
           throw new Error(result.error || `HTTP ${response.status}`)
         }
 
-        setData(result)
+        // Handle different response formats
+        if (isGoogleNews) {
+          // Google News API response format
+          if (result.success) {
+            setData({
+              success: true,
+              content: result.content || "",
+              htmlContent: result.htmlContent,
+              textContent: result.textContent,
+              extractedBy: result.extractedBy,
+              confidence: result.confidence
+            })
+            console.log(`✅ Google News extraction successful (${result.extractedBy}, ${result.timing?.total}ms)`)
+          } else {
+            throw new Error(result.error || 'Google News extraction failed')
+          }
+        } else {
+          // Standard extraction API response format
+          setData(result)
+          console.log(`✅ Standard extraction successful`)
+        }
+
       } catch (err) {
         console.error("Content extraction error:", err)
         setError(err instanceof Error ? err.message : "Failed to extract content")

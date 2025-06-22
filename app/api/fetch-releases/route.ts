@@ -13,6 +13,8 @@ interface RSSItem {
   feedSource: string
   feedType: "ir-news" | "sec-filings" | "all-news" | "financial"
   sourceName: string
+  isGoogleNews?: boolean
+  requiresRedirectResolution?: boolean
 }
 
 interface FeedResult {
@@ -179,24 +181,38 @@ function parseRSSXML(xmlText: string, feedSource: string, feedType: string, sour
         // Extract company mentions from title and description
         const companyMentions = extractCompanyMentions(fullText)
 
-        items.push({
+        // Check if this is a Google News URL
+        const isGoogleNewsLink = link.includes('news.google.com/rss/articles/') || 
+                                link.includes('news.google.com/articles/')
+
+        // Clean HTML from description for better processing
+        const cleanDescription = description.replace(/<[^>]*>/g, '').trim()
+
+        const item: RSSItem = {
           title,
-          description,
+          description: cleanDescription,
           pubDate,
           link,
           guid,
           companyMentions,
           feedSource,
-          feedType: feedType as any,
+          feedType: feedType as "ir-news" | "sec-filings" | "all-news" | "financial",
           sourceName,
-        })
-      } catch (itemError) {
-        console.error(`Error parsing RSS item from ${feedSource}:`, itemError)
-        // Continue processing other items
+          // Add metadata for Google News links
+          ...(isGoogleNewsLink && {
+            isGoogleNews: true,
+            requiresRedirectResolution: true
+          })
+        }
+
+        items.push(item)
+      } catch (error) {
+        console.warn("Error parsing RSS item:", error)
+        continue
       }
     }
-  } catch (parseError) {
-    console.error(`Error parsing RSS XML from ${feedSource}:`, parseError)
+  } catch (error) {
+    console.error("Error parsing RSS XML:", error)
     throw new Error(`Failed to parse RSS XML from ${feedSource}`)
   }
 
