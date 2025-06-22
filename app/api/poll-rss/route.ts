@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@/lib/supabase/server'
-import { pressReleasesService } from '@/lib/supabase/press-releases-service'
+import { createClient } from '@supabase/supabase-js'
+import { pressReleasesService, adminPressReleasesService } from '@/lib/supabase/press-releases-service'
 import { companyManager } from '@/lib/supabase/database'
 import { processRSSFeed } from '@/lib/rss-to-stored-release'
 import { getFeedsForCompanies } from '@/lib/rss-sources'
+
+// Admin client for cron jobs
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 interface PollResult {
   companyId: string
@@ -65,8 +72,24 @@ export async function POST(request: NextRequest) {
     
     console.log(`🔄 Starting RSS poll for user ${userId}${companyId ? ` (company: ${companyId})` : ''}`)
     
-    // Get user's companies
-    const companies = await companyManager.getCompanies()
+    // Get user's companies (use admin client for cron calls)
+    let companies
+    if (cronUserId && authHeader === `Bearer ${cronSecret}`) {
+      // For cron calls, get companies directly with admin client
+      const { data: companiesData, error: companiesError } = await supabaseAdmin
+        .from('companies')
+        .select('*')
+        .eq('user_id', userId)
+      
+      if (companiesError) {
+        throw new Error(`Failed to get companies: ${companiesError.message}`)
+      }
+      
+      companies = companiesData || []
+    } else {
+      // For regular user calls, use the existing company manager
+      companies = await companyManager.getCompanies()
+    }
     
     if (!companies || companies.length === 0) {
       return NextResponse.json({
@@ -87,7 +110,7 @@ export async function POST(request: NextRequest) {
     
     // Filter companies if specific companyId requested
     const companiesToProcess = companyId 
-      ? companies.filter(c => c.id === companyId)
+      ? companies.filter((c: any) => c.id === companyId)
       : companies
     
     if (companyId && companiesToProcess.length === 0) {
@@ -106,8 +129,11 @@ export async function POST(request: NextRequest) {
     let totalDuplicates = 0
     let errors = 0
     
+    // Determine if this is a cron call
+    const isCronCall = Boolean(cronUserId && authHeader === `Bearer ${cronSecret}`)
+    
     for (const company of companiesToProcess) {
-      const pollResult = await pollCompanyRSS(userId, company, forceRefresh)
+      const pollResult = await pollCompanyRSS(userId, company, forceRefresh, isCronCall)
       results.push(pollResult)
       
       if (pollResult.success) {
@@ -172,16 +198,23 @@ export async function POST(request: NextRequest) {
 async function pollCompanyRSS(
   userId: string, 
   company: any, 
-  forceRefresh: boolean = false
+  forceRefresh: boolean = false,
+  isCronCall: boolean = false
 ): Promise<PollResult> {
   const pollStartTime = new Date().toISOString()
   
-  // Create poll log entry
-  const pollLog = await pressReleasesService.createPollLog(userId, {
-    companyId: company.id,
-    pollStartedAt: pollStartTime,
-    status: 'running'
-  })
+  // Create poll log entry (use admin service for cron calls)
+  const pollLog = isCronCall
+    ? await adminPressReleasesService.adminCreatePollLog(userId, {
+        companyId: company.id,
+        pollStartedAt: pollStartTime,
+        status: 'running'
+      })
+    : await pressReleasesService.createPollLog(userId, {
+        companyId: company.id,
+        pollStartedAt: pollStartTime,
+        status: 'running'
+      })
   
   try {
     console.log(`🔍 Polling RSS for company: ${company.name}`)
@@ -192,7 +225,7 @@ async function pollCompanyRSS(
     
     // Fetch RSS data using existing API
     const companiesParam = encodeURIComponent(JSON.stringify(companiesData))
-    const rssResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/fetch-releases?companies=${companiesParam}`)
+    const rssResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3006'}/api/fetch-releases?companies=${companiesParam}`)
     
     if (!rssResponse.ok) {
       throw new Error(`RSS fetch failed: ${rssResponse.status}`)
@@ -215,23 +248,32 @@ async function pollCompanyRSS(
     
     console.log(`✅ Processed ${validReleases.length} valid releases, skipped ${skippedCount}`)
     
-    // Store releases in database
-    const { created, duplicates } = await pressReleasesService.batchCreatePressReleases(
-      userId,
-      validReleases
-    )
+    // Store releases in database (use admin service for cron calls)
+    const { created, duplicates } = isCronCall
+      ? await adminPressReleasesService.adminBatchCreatePressReleases(userId, validReleases)
+      : await pressReleasesService.batchCreatePressReleases(userId, validReleases)
     
     console.log(`💾 Stored ${created} new releases, ${duplicates} duplicates for ${company.name}`)
     
-    // Update poll log with success
+    // Update poll log with success (use admin service for cron calls)
     if (pollLog) {
-      await pressReleasesService.updatePollLog(pollLog.id, {
-        status: 'success',
-        pollCompletedAt: new Date().toISOString(),
-        releasesFound: validReleases.length,
-        releasesNew: created,
-        releasesDuplicate: duplicates
-      })
+      if (isCronCall) {
+        await adminPressReleasesService.adminUpdatePollLog(pollLog.id, {
+          status: 'success',
+          pollCompletedAt: new Date().toISOString(),
+          releasesFound: validReleases.length,
+          releasesNew: created,
+          releasesDuplicate: duplicates
+        })
+      } else {
+        await pressReleasesService.updatePollLog(pollLog.id, {
+          status: 'success',
+          pollCompletedAt: new Date().toISOString(),
+          releasesFound: validReleases.length,
+          releasesNew: created,
+          releasesDuplicate: duplicates
+        })
+      }
     }
     
     return {
@@ -248,14 +290,23 @@ async function pollCompanyRSS(
     
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     
-    // Update poll log with error
+    // Update poll log with error (use admin service for cron calls)
     if (pollLog) {
-      await pressReleasesService.updatePollLog(pollLog.id, {
-        status: 'error',
-        pollCompletedAt: new Date().toISOString(),
-        errorMessage,
-        errorDetails: error instanceof Error ? { stack: error.stack } : { error }
-      })
+      if (isCronCall) {
+        await adminPressReleasesService.adminUpdatePollLog(pollLog.id, {
+          status: 'error',
+          pollCompletedAt: new Date().toISOString(),
+          errorMessage,
+          errorDetails: error instanceof Error ? { stack: error.stack } : { error }
+        })
+      } else {
+        await pressReleasesService.updatePollLog(pollLog.id, {
+          status: 'error',
+          pollCompletedAt: new Date().toISOString(),
+          errorMessage,
+          errorDetails: error instanceof Error ? { stack: error.stack } : { error }
+        })
+      }
     }
     
     return {

@@ -40,19 +40,36 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Get all users who have companies
+    // Get all users who have companies (fixed for TEXT user_id)
     const { data: users, error: usersError } = await supabaseAdmin
       .from('companies')
       .select('user_id')
-      .neq('user_id', null)
+      .not('user_id', 'is', null)
+      .neq('user_id', '')
     
     if (usersError) {
       throw new Error(`Failed to get users: ${usersError.message}`)
     }
     
     // Get unique user IDs
-    const uniqueUserIds = [...new Set(users?.map(u => u.user_id) || [])]
+    const uniqueUserIds = [...new Set(users?.map((u: any) => u.user_id) || [])]
     console.log(`📋 Found ${uniqueUserIds.length} users with companies`)
+    
+    if (uniqueUserIds.length === 0) {
+      console.log('⚠️ No users with companies found')
+      return NextResponse.json({
+        message: 'No users with companies found',
+        result: {
+          totalUsers: 0,
+          successfulPolls: 0,
+          failedPolls: 0,
+          errors: [],
+          startTime,
+          endTime: new Date().toISOString(),
+          duration: Date.now() - startTimestamp
+        }
+      })
+    }
     
     const result: CronResult = {
       totalUsers: uniqueUserIds.length,
@@ -70,12 +87,12 @@ export async function POST(request: NextRequest) {
         console.log(`🔄 Polling RSS for user: ${userId}`)
         
         // Call the poll-rss endpoint for this user
-        const pollResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/poll-rss`, {
+        const pollResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3006'}/api/poll-rss`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${cronSecret}`, // Internal auth
-            'X-User-ID': userId, // Pass user ID in header for cron context
+            'X-User-ID': String(userId), // Pass user ID in header for cron context
           },
           body: JSON.stringify({ forceRefresh: false })
         })

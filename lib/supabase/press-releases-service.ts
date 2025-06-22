@@ -1,4 +1,5 @@
 import { createClientComponentClient } from './client'
+import { createClient } from '@supabase/supabase-js'
 import type { 
   StoredPressRelease, 
   CreateStoredPressRelease, 
@@ -7,8 +8,14 @@ import type {
 } from '../types'
 import { generateContentHash } from '../content-hash'
 
+// Admin client for server-side operations
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
 class PressReleasesService {
-  private supabase = createClientComponentClient()
+  protected supabase = createClientComponentClient()
 
   /**
    * Store a new press release, checking for duplicates
@@ -357,7 +364,7 @@ class PressReleasesService {
   /**
    * Map database row to RSSPollLog
    */
-  private mapDbToPollLog(data: any): RSSPollLog {
+  protected mapDbToPollLog(data: any): RSSPollLog {
     return {
       id: data.id,
       userId: data.user_id,
@@ -375,5 +382,158 @@ class PressReleasesService {
   }
 }
 
-// Export singleton instance
-export const pressReleasesService = new PressReleasesService() 
+/**
+ * Admin version of PressReleasesService for server-side/cron operations
+ */
+class AdminPressReleasesService extends PressReleasesService {
+  protected supabase = supabaseAdmin
+
+  /**
+   * Create press releases using admin client (bypasses RLS)
+   */
+  async adminBatchCreatePressReleases(
+    userId: string,
+    releases: CreateStoredPressRelease[]
+  ): Promise<{ created: number; duplicates: number }> {
+    let created = 0
+    let duplicates = 0
+
+    console.log(`📦 Admin batch creating ${releases.length} press releases for user ${userId}`)
+
+    for (const release of releases) {
+      try {
+        // Check for duplicates using admin client
+        const { data: existingRelease, error: duplicateError } = await supabaseAdmin
+          .from('press_releases')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('company_id', release.companyId)
+          .eq('content_hash', release.contentHash)
+          .eq('is_deleted', false)
+          .single()
+
+        if (existingRelease) {
+          duplicates++
+          console.log(`📦 Duplicate found for: ${release.title}`)
+          continue
+        }
+
+        // Create new release using admin client
+        const { data: newRelease, error: createError } = await supabaseAdmin
+          .from('press_releases')
+          .insert({
+            user_id: userId,
+            company_id: release.companyId,
+            title: release.title,
+            content: release.content,
+            summary: release.summary,
+            source_url: release.sourceUrl,
+            published_at: release.publishedAt,
+            content_hash: release.contentHash,
+            rss_source_url: release.rssSourceUrl,
+            ai_analysis: release.aiAnalysis,
+            highlights: release.highlights,
+          })
+          .select()
+          .single()
+
+        if (createError) {
+          console.error(`❌ Failed to create release: ${release.title}`, createError)
+          continue
+        }
+
+        created++
+        console.log(`✅ Created release: ${release.title}`)
+
+      } catch (error) {
+        console.error(`💥 Error processing release: ${release.title}`, error)
+      }
+    }
+
+    console.log(`📊 Admin batch complete: ${created} created, ${duplicates} duplicates`)
+    return { created, duplicates }
+  }
+
+  /**
+   * Create poll log using admin client
+   */
+  async adminCreatePollLog(
+    userId: string,
+    data: CreateRSSPollLog
+  ): Promise<RSSPollLog | null> {
+    try {
+      const { data: newLog, error } = await supabaseAdmin
+        .from('rss_poll_logs')
+        .insert({
+          user_id: userId,
+          company_id: data.companyId,
+          poll_started_at: data.pollStartedAt,
+          status: data.status,
+          releases_found: data.releasesFound || 0,
+          releases_new: data.releasesNew || 0,
+          releases_duplicate: data.releasesDuplicate || 0,
+          error_message: data.errorMessage,
+          error_details: data.errorDetails,
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error creating admin poll log:', error)
+        return null
+      }
+
+      return this.mapDbToPollLog(newLog)
+    } catch (error) {
+      console.error('Error in adminCreatePollLog:', error)
+      return null
+    }
+  }
+
+  /**
+   * Update poll log using admin client
+   */
+  async adminUpdatePollLog(
+    logId: string,
+    updates: {
+      status: 'success' | 'error'
+      pollCompletedAt: string
+      releasesFound?: number
+      releasesNew?: number
+      releasesDuplicate?: number
+      errorMessage?: string
+      errorDetails?: any
+    }
+  ): Promise<RSSPollLog | null> {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('rss_poll_logs')
+        .update({
+          status: updates.status,
+          poll_completed_at: updates.pollCompletedAt,
+          releases_found: updates.releasesFound,
+          releases_new: updates.releasesNew,
+          releases_duplicate: updates.releasesDuplicate,
+          error_message: updates.errorMessage,
+          error_details: updates.errorDetails,
+        })
+        .eq('id', logId)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error updating admin poll log:', error)
+        return null
+      }
+
+      return this.mapDbToPollLog(data)
+    } catch (error) {
+      console.error('Error in adminUpdatePollLog:', error)
+      return null
+    }
+  }
+}
+
+// Export singleton instances
+export const pressReleasesService = new PressReleasesService()
+export const adminPressReleasesService = new AdminPressReleasesService() 
