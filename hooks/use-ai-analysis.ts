@@ -9,7 +9,9 @@ export interface AnalysisResult {
   highlights: Array<{
     type: "financial" | "opportunity" | "risk" | "strategic"
     text: string
-    reasoning: string
+    reasoning?: string
+    start?: number
+    end?: number
   }>
   usage?: {
     inputTokens: number
