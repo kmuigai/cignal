@@ -61,17 +61,19 @@ export async function GET(request: Request) {
       result.timing.redirectResolution = Date.now() - redirectStart
 
       if (!redirectResult.success) {
-        result.error = `Redirect resolution failed: ${redirectResult.error}`
-        result.timing.total = Date.now() - startTime
-        return NextResponse.json(result, { status: 500 })
+        console.log(`⚠️ Redirect resolution failed: ${redirectResult.error}`)
+        console.log(`🔄 Falling back to Google News URL handling in content extractor...`)
+        // Continue with original URL - the content extractor will handle it
+        finalUrl = url
+        result.resolvedUrl = url
+        result.redirectChain = [url]
+      } else {
+        finalUrl = redirectResult.finalUrl!
+        result.resolvedUrl = finalUrl
+        result.redirectChain = redirectResult.redirectChain
+        result.cached = redirectResult.cached
+        console.log(`✅ Resolved to: ${finalUrl}`)
       }
-
-      finalUrl = redirectResult.finalUrl!
-      result.resolvedUrl = finalUrl
-      result.redirectChain = redirectResult.redirectChain
-      result.cached = redirectResult.cached
-
-      console.log(`✅ Resolved to: ${finalUrl}`)
     } else {
       console.log(`ℹ️ Direct URL, no redirect resolution needed`)
       result.timing.redirectResolution = Date.now() - redirectStart

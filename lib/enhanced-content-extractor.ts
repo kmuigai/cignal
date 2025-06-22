@@ -13,6 +13,17 @@ interface ContentExtractionResult {
   extractedBy?: string
   confidence?: number
   error?: string
+  timing?: {
+    total: number
+    extraction: number
+  }
+  isGoogleNewsFallback?: boolean
+  originalGoogleNewsUrl?: string
+}
+
+interface ExtractionOptions {
+  timeout?: number
+  retries?: number
 }
 
 interface ExtractorConfig {
@@ -38,6 +49,8 @@ const DEFAULT_CONFIG: ExtractorConfig = {
     'Sec-Fetch-Site': 'none',
   }
 }
+
+const REQUEST_TIMEOUT = 20000 // 20 seconds
 
 // Source-specific content extractors
 const CONTENT_EXTRACTORS = {
@@ -166,22 +179,27 @@ const CONTENT_EXTRACTORS = {
  * Extract content from a URL with intelligent source detection
  */
 export async function extractContentFromUrl(
-  url: string, 
-  config: Partial<ExtractorConfig> = {}
+  url: string,
+  options: ExtractionOptions = {}
 ): Promise<ContentExtractionResult> {
-  const finalConfig = { ...DEFAULT_CONFIG, ...config }
-  
-  console.log(`🔍 Extracting content from: ${url}`)
-
-  // Detect source and get appropriate extractor
-  const source = detectNewsSource(url)
-  const extractor = CONTENT_EXTRACTORS[source] || CONTENT_EXTRACTORS.generic
-  
-  console.log(`📰 Detected source: ${extractor.name} (${source})`)
+  const startTime = Date.now()
 
   try {
+    console.log(`🔍 Extracting content from: ${url.substring(0, 100)}...`)
+
+    // Check if this is a Google News URL that we couldn't resolve
+    if (isGoogleNewsUrl(url)) {
+      return handleUnresolvedGoogleNewsUrl(url)
+    }
+
+    // Determine source and get appropriate extractor
+    const source = detectNewsSource(url)
+    const extractor = CONTENT_EXTRACTORS[source as keyof typeof CONTENT_EXTRACTORS] || CONTENT_EXTRACTORS.generic
+    
+    console.log(`📰 Detected source: ${extractor.name} (${source})`)
+
     // Fetch HTML with retries
-    const html = await fetchHtmlWithRetries(url, finalConfig)
+    const html = await fetchHtmlWithRetries(url, { ...DEFAULT_CONFIG, timeout: options.timeout || DEFAULT_CONFIG.timeout })
     
     if (!html || html.trim().length === 0) {
       throw new Error('Empty HTML response')
@@ -202,20 +220,141 @@ export async function extractContentFromUrl(
       extractionResult = await tryFallbackExtraction(html)
     }
 
+    const totalTime = Date.now() - startTime
+    console.log(`✅ Content extraction completed in ${totalTime}ms`)
+
     if (extractionResult.success) {
       console.log(`✅ Content extracted successfully (${extractionResult.extractedBy}, confidence: ${extractionResult.confidence})`)
       console.log(`📊 Content length: ${extractionResult.content.length} chars`)
     }
 
-    return extractionResult
+    return {
+      ...extractionResult,
+      timing: {
+        total: totalTime,
+        extraction: totalTime,
+      }
+    }
 
   } catch (error) {
-    console.error(`❌ Content extraction failed:`, error)
+    const totalTime = Date.now() - startTime
+    console.error(`❌ Content extraction failed after ${totalTime}ms:`, error)
+
     return {
       success: false,
       content: '',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown extraction error',
+      timing: {
+        total: totalTime,
+        extraction: totalTime,
+      }
     }
+  }
+}
+
+/**
+ * Handle Google News URLs that couldn't be resolved to actual article URLs
+ */
+function handleUnresolvedGoogleNewsUrl(googleNewsUrl: string): ContentExtractionResult {
+  console.log(`🔄 Handling unresolved Google News URL: ${googleNewsUrl.substring(0, 100)}...`)
+
+  // Extract source hint from the URL
+  const sourceHint = extractSourceHintFromGoogleNewsUrl(googleNewsUrl)
+  const sourceName = sourceHint || 'Google News'
+
+  // Create a helpful message for the user
+  const content = `
+    <div class="google-news-fallback">
+      <div class="google-news-header">
+        <h3>📰 Article from ${sourceName}</h3>
+        <p class="google-news-notice">
+          This article is hosted on Google News. Click the link below to read the full article on the original website.
+        </p>
+      </div>
+      
+      <div class="google-news-actions">
+        <a href="${googleNewsUrl}" target="_blank" rel="noopener noreferrer" class="google-news-link">
+          🔗 Read Full Article on ${sourceName}
+        </a>
+      </div>
+      
+      <div class="google-news-info">
+        <p><strong>Why am I seeing this?</strong></p>
+        <p>Google News uses special URLs that require JavaScript to redirect to the actual article. 
+           For the best reading experience, please click the link above to view the article on the original website.</p>
+      </div>
+    </div>
+  `.trim()
+
+  return {
+    success: true,
+    content,
+    htmlContent: content,
+    textContent: `Article from ${sourceName}\n\nThis article is hosted on Google News. Please visit the original website to read the full content.\n\nURL: ${googleNewsUrl}`,
+    extractedBy: 'google-news-fallback',
+    confidence: 50, // Lower confidence since we couldn't get the actual content
+    isGoogleNewsFallback: true,
+    originalGoogleNewsUrl: googleNewsUrl,
+  }
+}
+
+/**
+ * Check if URL is a Google News URL
+ */
+function isGoogleNewsUrl(url: string): boolean {
+  return url.includes('news.google.com/rss/articles/') || 
+         url.includes('news.google.com/articles/')
+}
+
+/**
+ * Extract source hint from Google News URL
+ */
+function extractSourceHintFromGoogleNewsUrl(url: string): string | null {
+  try {
+    const urlObj = new URL(url)
+    
+    // Check for site parameter in search URLs
+    const query = urlObj.searchParams.get('q')
+    if (query) {
+      const siteMatch = query.match(/site:([^\s&]+)/)
+      if (siteMatch) {
+        const domain = siteMatch[1]
+        // Convert domain to readable name
+        if (domain.includes('reuters.com')) return 'Reuters'
+        if (domain.includes('bloomberg.com')) return 'Bloomberg'
+        if (domain.includes('wsj.com')) return 'Wall Street Journal'
+        if (domain.includes('nytimes.com')) return 'New York Times'
+        if (domain.includes('cnn.com')) return 'CNN'
+        if (domain.includes('bbc.com')) return 'BBC'
+        return domain
+      }
+    }
+    
+    // For RSS article URLs, try to infer from the referrer or context
+    // This is a heuristic approach based on common patterns
+    if (url.includes('/rss/articles/')) {
+      // If we can't get the source from the URL itself, we'll need to rely on context
+      // For now, we'll check if there are any hints in the URL structure
+      
+      // Check if this looks like a Reuters article based on URL patterns
+      // This is a rough heuristic - in practice, we'd get this from RSS context
+      const articleId = url.match(/\/articles\/([^?]+)/)?.[1]
+      if (articleId) {
+        try {
+          // Try to decode and look for patterns
+          const decoded = Buffer.from(articleId, 'base64').toString('binary')
+          if (decoded.toLowerCase().includes('reuters')) {
+            return 'Reuters'
+          }
+        } catch {
+          // Ignore decode errors
+        }
+      }
+    }
+    
+    return null
+  } catch {
+    return null
   }
 }
 
@@ -384,7 +523,7 @@ function detectNewsSource(url: string): string {
     const cleanHostname = hostname.replace(/^www\./, '')
     
     // Check for exact matches first
-    if (CONTENT_EXTRACTORS[cleanHostname]) {
+    if (cleanHostname in CONTENT_EXTRACTORS) {
       return cleanHostname
     }
     

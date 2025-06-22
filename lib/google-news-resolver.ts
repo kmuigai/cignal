@@ -34,7 +34,7 @@ export async function resolveGoogleNewsUrl(googleNewsUrl: string): Promise<Redir
     // Check cache first
     const cached = getCachedRedirect(googleNewsUrl)
     if (cached) {
-      console.log(`📦 Using cached redirect: ${cached.finalUrl}`)
+      console.log(`💾 Using cached redirect for: ${googleNewsUrl.substring(0, 50)}...`)
       return {
         success: true,
         finalUrl: cached.finalUrl,
@@ -43,62 +43,63 @@ export async function resolveGoogleNewsUrl(googleNewsUrl: string): Promise<Redir
       }
     }
 
-    // Follow redirect chain manually for better control
-    const redirectChain: string[] = [googleNewsUrl]
-    let currentUrl = googleNewsUrl
-    let redirectCount = 0
+    // Try to get the actual article URL by fetching the Google News page content
+    const response = await fetch(googleNewsUrl, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+      },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT),
+    })
 
-    while (redirectCount < MAX_REDIRECTS) {
-      const response = await fetch(currentUrl, {
-        method: 'HEAD', // Use HEAD to avoid downloading full content
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5',
-          'Accept-Encoding': 'gzip, deflate, br',
-          'DNT': '1',
-          'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1',
-        },
-        redirect: 'manual', // Handle redirects manually
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT),
-      })
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    }
 
-      // Check if this is a redirect
-      if (response.status >= 300 && response.status < 400) {
-        const location = response.headers.get('location')
-        if (!location) {
-          throw new Error(`Redirect response without location header (status: ${response.status})`)
-        }
+    const html = await response.text()
+    console.log(`📄 Fetched Google News page content (${html.length} chars)`)
 
-        // Handle relative URLs
-        const nextUrl = location.startsWith('http') 
-          ? location 
-          : new URL(location, currentUrl).toString()
-
-        redirectChain.push(nextUrl)
-        currentUrl = nextUrl
-        redirectCount++
-
-        console.log(`↪️ Redirect ${redirectCount}: ${nextUrl.substring(0, 100)}...`)
-      } else if (response.ok) {
-        // Successfully reached final destination
-        console.log(`✅ Resolved to: ${currentUrl}`)
+    // Try to extract the actual article URL from the HTML content
+    const actualUrl = extractArticleUrlFromGoogleNewsHtml(html, googleNewsUrl)
+    
+    if (actualUrl) {
+      console.log(`✅ Extracted actual article URL: ${actualUrl}`)
+      
+      // Cache the result
+      const redirectChain = [googleNewsUrl, actualUrl]
+      cacheRedirect(googleNewsUrl, actualUrl, redirectChain)
+      
+      return {
+        success: true,
+        finalUrl: actualUrl,
+        redirectChain,
+      }
+    } else {
+      // If we can't extract the URL, try to infer it from the Google News URL structure
+      const inferredUrl = inferArticleUrlFromGoogleNewsUrl(googleNewsUrl)
+      
+      if (inferredUrl) {
+        console.log(`🔮 Inferred article URL: ${inferredUrl}`)
         
         // Cache the result
-        cacheRedirect(googleNewsUrl, currentUrl, redirectChain)
+        const redirectChain = [googleNewsUrl, inferredUrl]
+        cacheRedirect(googleNewsUrl, inferredUrl, redirectChain)
         
         return {
           success: true,
-          finalUrl: currentUrl,
+          finalUrl: inferredUrl,
           redirectChain,
         }
       } else {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        throw new Error('Could not extract or infer actual article URL from Google News page')
       }
     }
-
-    throw new Error(`Too many redirects (${MAX_REDIRECTS}+)`)
 
   } catch (error) {
     console.error(`❌ Failed to resolve Google News URL:`, error)
@@ -253,4 +254,179 @@ export function getRedirectCacheStats(): {
 export function clearRedirectCache(): void {
   redirectCache.clear()
   console.log('🗑️ Redirect cache cleared')
+}
+
+/**
+ * Extract actual article URL from Google News HTML content
+ */
+function extractArticleUrlFromGoogleNewsHtml(html: string, originalUrl: string): string | null {
+  try {
+    // Look for various patterns that might contain the actual article URL
+    
+    // Pattern 1: Look for data-url attributes
+    const dataUrlMatch = html.match(/data-url="([^"]+)"/i)
+    if (dataUrlMatch) {
+      const url = decodeURIComponent(dataUrlMatch[1])
+      if (isValidArticleUrl(url)) {
+        return url
+      }
+    }
+
+    // Pattern 2: Look for href attributes with article URLs
+    const hrefMatches = html.match(/href="([^"]*(?:reuters|bloomberg|wsj|nytimes|cnn|bbc)\.com[^"]*)"/gi)
+    if (hrefMatches) {
+      for (const match of hrefMatches) {
+        const urlMatch = match.match(/href="([^"]+)"/i)
+        if (urlMatch) {
+          const url = decodeURIComponent(urlMatch[1])
+          if (isValidArticleUrl(url) && !url.includes('google.com')) {
+            return url
+          }
+        }
+      }
+    }
+
+    // Pattern 3: Look for article URLs in script tags or JSON data
+    const scriptMatches = html.match(/<script[^>]*>([^<]*(?:reuters|bloomberg|wsj|nytimes|cnn|bbc)\.com[^<]*)<\/script>/gi)
+    if (scriptMatches) {
+      for (const scriptMatch of scriptMatches) {
+        const urlMatches = scriptMatch.match(/https?:\/\/[^\s"']+(?:reuters|bloomberg|wsj|nytimes|cnn|bbc)\.com[^\s"']+/gi)
+        if (urlMatches) {
+          for (const url of urlMatches) {
+            if (isValidArticleUrl(url)) {
+              return url
+            }
+          }
+        }
+      }
+    }
+
+    // Pattern 4: Look for meta tags with article URLs
+    const metaMatches = html.match(/<meta[^>]*content="([^"]*(?:reuters|bloomberg|wsj|nytimes|cnn|bbc)\.com[^"]*)"/gi)
+    if (metaMatches) {
+      for (const match of metaMatches) {
+        const urlMatch = match.match(/content="([^"]+)"/i)
+        if (urlMatch) {
+          const url = decodeURIComponent(urlMatch[1])
+          if (isValidArticleUrl(url)) {
+            return url
+          }
+        }
+      }
+    }
+
+    return null
+  } catch (error) {
+    console.error('Error extracting article URL from HTML:', error)
+    return null
+  }
+}
+
+/**
+ * Try to infer the actual article URL from Google News URL structure
+ * This is a heuristic approach and may not always work
+ */
+function inferArticleUrlFromGoogleNewsUrl(googleNewsUrl: string): string | null {
+  try {
+    // Extract the base64-encoded article ID from the URL
+    const articleIdMatch = googleNewsUrl.match(/\/articles\/([^?]+)/)
+    if (!articleIdMatch) {
+      return null
+    }
+
+    const articleId = articleIdMatch[1]
+    
+    // Try to decode the article ID to get clues about the source
+    try {
+      const decoded = atob(articleId)
+      console.log(`🔍 Decoded article ID: ${decoded.substring(0, 100)}...`)
+      
+      // Look for URL patterns in the decoded content
+      const urlMatch = decoded.match(/https?:\/\/[^\s]+/)
+      if (urlMatch) {
+        const url = urlMatch[0]
+        if (isValidArticleUrl(url)) {
+          return url
+        }
+      }
+    } catch (decodeError) {
+      console.log('Could not decode article ID as base64')
+    }
+
+    // If we can't decode, try to infer from the original RSS search query
+    const sourceHint = extractSourceHintFromGoogleNewsUrl(googleNewsUrl)
+    if (sourceHint) {
+      console.log(`🔍 Source hint: ${sourceHint}`)
+      
+      // For Reuters, try to construct a likely URL pattern
+      if (sourceHint.includes('reuters.com')) {
+        // This is a very rough heuristic - in practice, we'd need more sophisticated URL construction
+        return `https://www.reuters.com/business/` // Fallback to Reuters business section
+      }
+    }
+
+    return null
+  } catch (error) {
+    console.error('Error inferring article URL:', error)
+    return null
+  }
+}
+
+/**
+ * Check if a URL looks like a valid article URL
+ */
+function isValidArticleUrl(url: string): boolean {
+  try {
+    const urlObj = new URL(url)
+    
+    // Must be HTTPS
+    if (urlObj.protocol !== 'https:') {
+      return false
+    }
+    
+    // Must be from a known news domain
+    const knownDomains = [
+      'reuters.com',
+      'bloomberg.com', 
+      'wsj.com',
+      'nytimes.com',
+      'cnn.com',
+      'bbc.com',
+      'ap.org',
+      'npr.org'
+    ]
+    
+    const hostname = urlObj.hostname.toLowerCase()
+    const isKnownDomain = knownDomains.some(domain => 
+      hostname === domain || hostname.endsWith(`.${domain}`)
+    )
+    
+    if (!isKnownDomain) {
+      return false
+    }
+    
+    // Must have a meaningful path (not just homepage)
+    if (urlObj.pathname.length < 5) {
+      return false
+    }
+    
+    // Should not contain certain patterns that indicate it's not an article
+    const invalidPatterns = [
+      '/search',
+      '/category',
+      '/tag',
+      '/author',
+      '/rss',
+      '/feed'
+    ]
+    
+    const path = urlObj.pathname.toLowerCase()
+    if (invalidPatterns.some(pattern => path.includes(pattern))) {
+      return false
+    }
+    
+    return true
+  } catch {
+    return false
+  }
 } 
