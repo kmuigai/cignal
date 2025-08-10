@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getFeedsForCompanies, getFeedDisplayName } from "@/lib/rss-sources"
 import { detectFintechContent } from "@/lib/fintech-detector"
 import { createRouteHandlerClient } from '@/lib/supabase/server'
-import { rssSourceManager } from '@/lib/supabase/database'
+import { RSSSourceManager } from '@/lib/supabase/database'
 
 interface RSSItem {
   title: string
@@ -415,11 +415,15 @@ export async function GET(request: Request) {
           // Get all RSS sources for all user companies
           for (const company of userCompanies) {
             try {
+              console.log(`[RSS Integration] Fetching RSS sources for company: ${company.name} (ID: ${company.id})`)
+              const rssSourceManager = new RSSSourceManager(supabase)
               const rssSources = await rssSourceManager.getRSSSourcesByCompany(company.id)
+              console.log(`[RSS Integration] Found ${rssSources.length} RSS sources for ${company.name}:`, rssSources.map(s => s.feedName))
               
               // Convert RSS sources to feed format
               for (const source of rssSources) {
                 if (source.enabled) {
+                  console.log(`[RSS Integration] Adding enabled RSS source: ${source.feedName} (${source.feedUrl})`)
                   companyFeeds.push({
                     type: source.feedType,
                     url: source.feedUrl,
@@ -427,6 +431,8 @@ export async function GET(request: Request) {
                     sourceName: company.name,
                     companyId: company.id
                   })
+                } else {
+                  console.log(`[RSS Integration] Skipping disabled RSS source: ${source.feedName}`)
                 }
               }
             } catch (error) {
