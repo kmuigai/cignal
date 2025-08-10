@@ -128,22 +128,32 @@ export async function testRSSConnectivity(
   }
   
   try {
-    // Use fetch with timeout and CORS handling
+    // Check if we're running in browser or server
+    const isServer = typeof window === 'undefined'
+    
+    // Use fetch with timeout
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), timeout)
     
-    const response = await fetch(url, {
+    const fetchOptions: RequestInit = {
       signal: controller.signal,
       headers: {
         'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+        'User-Agent': 'Mozilla/5.0 (compatible; RSS-Validator/1.0)',
       },
-      mode: 'no-cors', // Handle CORS issues for client-side validation
-    })
+    }
+    
+    // Only add no-cors mode in browser environment
+    if (!isServer) {
+      fetchOptions.mode = 'no-cors'
+    }
+    
+    const response = await fetch(url, fetchOptions)
     
     clearTimeout(timeoutId)
     
-    // For no-cors mode, we can't read the response but can check if it loaded
-    if (response.type === 'opaque') {
+    // For no-cors mode in browser, we can't read the response but can check if it loaded
+    if (!isServer && response.type === 'opaque') {
       // Request succeeded but we can't read content due to CORS
       return {
         valid: true,
@@ -162,7 +172,7 @@ export async function testRSSConnectivity(
     
     // Try to parse the response if we can read it
     const contentType = response.headers.get('content-type') || ''
-    if (!contentType.includes('xml') && !contentType.includes('rss')) {
+    if (!contentType.includes('xml') && !contentType.includes('rss') && !contentType.includes('atom')) {
       console.warn('Response may not be XML/RSS format:', contentType)
     }
     
@@ -170,8 +180,9 @@ export async function testRSSConnectivity(
     const itemCount = (text.match(/<item[\s>]/g) || []).length +
                      (text.match(/<entry[\s>]/g) || []).length
     
-    // Extract title if possible
-    const titleMatch = text.match(/<title[^>]*>([^<]+)<\/title>/i)
+    // Extract title if possible (handle both RSS and Atom feeds)
+    const titleMatch = text.match(/<title[^>]*>([^<]+)<\/title>/i) ||
+                      text.match(/<title[^>]*>(.*?)<\/title>/is)
     const title = titleMatch ? titleMatch[1].trim() : undefined
     
     return {
@@ -185,7 +196,10 @@ export async function testRSSConnectivity(
   } catch (error) {
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
-        return { valid: false, error: 'Request timeout' }
+        return { valid: false, error: 'Request timeout - feed took too long to respond' }
+      }
+      if (error.message.includes('fetch')) {
+        return { valid: false, error: 'Unable to connect to feed - please check the URL' }
       }
       return { valid: false, error: error.message }
     }

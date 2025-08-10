@@ -29,7 +29,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate the RSS URL
-    const validationResult = await testRSSConnectivity(url)
+    let validationResult
+    try {
+      validationResult = await testRSSConnectivity(url)
+    } catch (testError) {
+      console.error('RSS connectivity test error:', testError)
+      // Provide a fallback validation result
+      validationResult = {
+        valid: false,
+        error: testError instanceof Error ? testError.message : 'Failed to test RSS feed'
+      }
+    }
     
     // Add additional information for UI
     const response = {
