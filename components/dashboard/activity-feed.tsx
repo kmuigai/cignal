@@ -100,6 +100,7 @@ export function ActivityFeed({
             <div className="flex gap-1 xs:gap-1.5 sm:gap-2 pb-2 min-w-max">
               {companyOptions.map((company) => {
                 const isProcessing = processingCompanies.has(company)
+                console.log(`🔍 Company: ${company}, isProcessing: ${isProcessing}`, Array.from(processingCompanies))
                 
                 return (
                   <Button

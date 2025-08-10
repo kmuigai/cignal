@@ -327,6 +327,8 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
         deleteCompany={deleteCompany}
         onCompaniesChange={async (newCompanies?: Company[], addedCompanyName?: string) => {
           console.log("🔄 Companies changed - updating optimistically")
+          console.log("📋 New companies:", newCompanies?.map(c => c.name))
+          console.log("🆕 Added company name:", addedCompanyName)
           
           // Update local state immediately with new companies
           if (newCompanies) {
@@ -336,7 +338,12 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
             
             // If a specific company was added, mark it as processing
             if (addedCompanyName) {
-              setProcessingCompanies(prev => new Set(prev).add(addedCompanyName))
+              console.log("⚡ Adding company to processing set:", addedCompanyName)
+              setProcessingCompanies(prev => {
+                const newSet = new Set(prev).add(addedCompanyName)
+                console.log("🔄 Processing companies now:", Array.from(newSet))
+                return newSet
+              })
             }
             
             // Trigger background refresh without loading state
@@ -344,6 +351,7 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
             silentRefresh?.().finally(() => {
               setIsBackgroundRefreshing(false)
               // Clear processing state for all companies when refresh completes
+              console.log("✅ Clearing processing companies")
               setProcessingCompanies(new Set())
             })
           }
