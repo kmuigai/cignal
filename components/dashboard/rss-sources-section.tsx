@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import React, { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
@@ -19,6 +19,13 @@ interface RSSSourcesSectionProps {
 
 export function RSSSourcesSection({ companies, selectedCompanyId, onCompanySelect }: RSSSourcesSectionProps) {
   const [showAddForm, setShowAddForm] = useState(false)
+  
+  // Initialize selected company if not set
+  React.useEffect(() => {
+    if (!selectedCompanyId && companies.length > 0) {
+      onCompanySelect(companies[0].id)
+    }
+  }, [companies, selectedCompanyId, onCompanySelect])
   
   const { 
     sources, 

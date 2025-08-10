@@ -485,21 +485,41 @@ export class RSSSourceManager {
   private supabase = createClientComponentClient()
 
   async getRSSSourcesByCompany(companyId: string): Promise<RSSSource[]> {
-    const {
-      data: { user },
-    } = await this.supabase.auth.getUser()
-    if (!user) throw new Error("User not authenticated")
+    try {
+      const {
+        data: { user },
+        error: authError
+      } = await this.supabase.auth.getUser()
+      
+      if (authError) {
+        console.error('[RSSSourceManager] Auth error:', authError)
+        throw new Error("Authentication failed")
+      }
+      
+      if (!user) {
+        console.error('[RSSSourceManager] No user found')
+        throw new Error("User not authenticated")
+      }
 
-    const { data, error } = await this.supabase
-      .from("rss_sources")
-      .select("*")
-      .eq("company_id", companyId)
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: true })
+      const { data, error } = await this.supabase
+        .from("rss_sources")
+        .select("*")
+        .eq("company_id", companyId)
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true })
 
-    if (error) throw error
+      if (error) {
+        console.error('[RSSSourceManager] Database error:', error)
+        // Return empty array instead of throwing for better UX
+        return []
+      }
 
-    return data.map(this.mapDatabaseToRSSSource)
+      return data ? data.map(this.mapDatabaseToRSSSource) : []
+    } catch (err) {
+      console.error('[RSSSourceManager] getRSSSourcesByCompany error:', err)
+      // Return empty array for better error recovery
+      return []
+    }
   }
 
   async getAllRSSSourcesByUser(): Promise<RSSSource[]> {

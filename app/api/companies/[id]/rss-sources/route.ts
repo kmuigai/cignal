@@ -8,6 +8,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  console.log('[RSS Sources API] GET request for company:', params.id)
+  
   try {
     const supabase = createRouteHandlerClient(request)
     
@@ -17,8 +19,17 @@ export async function GET(
       error: authError,
     } = await supabase.auth.getUser()
 
+    console.log('[RSS Sources API] Auth check:', { userId: user?.id, authError })
+
     if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      console.error('[RSS Sources API] Authentication failed:', authError)
+      return NextResponse.json({ error: 'Unauthorized - please log in' }, { status: 401 })
+    }
+
+    // Handle empty company ID
+    if (!params.id || params.id === 'undefined' || params.id === 'null') {
+      console.log('[RSS Sources API] No valid company ID provided')
+      return NextResponse.json({ sources: [] }, { status: 200 })
     }
 
     // Verify company belongs to user
@@ -28,19 +39,27 @@ export async function GET(
       .eq('id', params.id)
       .eq('user_id', user.id)
       .single()
+    
+    console.log('[RSS Sources API] Company check:', { company, companyError })
 
     if (companyError || !company) {
       return NextResponse.json({ error: 'Company not found or access denied' }, { status: 404 })
     }
 
     // Get RSS sources for the company
-    const sources = await rssSourceManager.getRSSSourcesByCompany(params.id)
-    
-    return NextResponse.json({ sources })
+    try {
+      const sources = await rssSourceManager.getRSSSourcesByCompany(params.id)
+      console.log('[RSS Sources API] Found sources:', sources.length)
+      return NextResponse.json({ sources })
+    } catch (dbError) {
+      console.error('[RSS Sources API] Database error:', dbError)
+      // Return empty array instead of error for better UX
+      return NextResponse.json({ sources: [] })
+    }
   } catch (error) {
-    console.error('Error fetching RSS sources:', error)
+    console.error('[RSS Sources API] Unexpected error:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', sources: [] },
       { status: 500 }
     )
   }
@@ -51,6 +70,8 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  console.log('[RSS Sources API] POST request for company:', params.id)
+  
   try {
     const supabase = createRouteHandlerClient(request)
     
@@ -61,7 +82,8 @@ export async function POST(
     } = await supabase.auth.getUser()
 
     if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      console.error('[RSS Sources API] POST - Authentication failed:', authError)
+      return NextResponse.json({ error: 'Unauthorized - please log in' }, { status: 401 })
     }
 
     // Verify company belongs to user

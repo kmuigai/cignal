@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import React, { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -34,9 +34,14 @@ export function CompanyManagementModal({
   deleteCompany 
 }: CompanyManagementModalProps) {
   const [activeTab, setActiveTab] = useState("ai")
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(
-    companies.length > 0 ? companies[0].id : null
-  )
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
+  
+  // Initialize selectedCompanyId when companies load or change
+  React.useEffect(() => {
+    if (!selectedCompanyId && companies.length > 0) {
+      setSelectedCompanyId(companies[0].id)
+    }
+  }, [companies, selectedCompanyId])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [addingNew, setAddingNew] = useState(false)
   const [editForm, setEditForm] = useState({ name: "", variations: "" })

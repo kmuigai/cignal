@@ -116,8 +116,11 @@ export function RSSSourceForm({ source, onSubmit, onCancel, onTestUrl }: RSSSour
     setError("")
     setValidationResult(null)
 
+    console.log('Testing RSS feed:', formData.feedUrl.trim())
+
     try {
       const result = await onTestUrl(formData.feedUrl.trim())
+      console.log('Test result:', result)
       setValidationResult(result)
       setUrlTested(true)
       

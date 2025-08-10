@@ -4,6 +4,8 @@ import { testRSSConnectivity, detectRSSFeedType, suggestFeedName } from '@/lib/r
 
 // POST /api/rss-sources/validate - Validate RSS URL without saving
 export async function POST(request: NextRequest) {
+  console.log('RSS Validate API called')
+  
   try {
     const supabase = createRouteHandlerClient(request)
     
@@ -13,13 +15,18 @@ export async function POST(request: NextRequest) {
       error: authError,
     } = await supabase.auth.getUser()
 
+    console.log('Auth check:', { user: user?.id, authError })
+
     if (authError || !user) {
+      console.error('Authentication failed:', authError)
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     // Parse request body
     const body = await request.json()
     const { url } = body
+
+    console.log('Validating RSS URL:', url)
 
     if (!url) {
       return NextResponse.json(
@@ -31,9 +38,11 @@ export async function POST(request: NextRequest) {
     // Validate the RSS URL
     let validationResult
     try {
+      console.log('Testing RSS connectivity for:', url)
       validationResult = await testRSSConnectivity(url)
+      console.log('RSS test result:', validationResult)
     } catch (testError) {
-      console.error('RSS connectivity test error:', testError)
+      console.error('RSS connectivity test error:', testError, 'URL:', url)
       // Provide a fallback validation result
       validationResult = {
         valid: false,
