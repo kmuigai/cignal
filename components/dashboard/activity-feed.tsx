@@ -23,6 +23,7 @@ interface ActivityFeedProps {
   lastUpdated: number | null
   onRefresh: () => void
   refreshing: boolean
+  isBackgroundRefreshing?: boolean
 }
 
 export function ActivityFeed({
@@ -36,6 +37,7 @@ export function ActivityFeed({
   lastUpdated,
   onRefresh,
   refreshing,
+  isBackgroundRefreshing = false,
 }: ActivityFeedProps) {
   // Safe array operations with null checks
   const safeCompanies = Array.isArray(companies) ? companies : []
@@ -44,11 +46,6 @@ export function ActivityFeed({
 
   // Add Fintech News as a special filter option
   const companyOptions = ["All", "Fintech News", ...safeCompanies.map((c) => c.name)]
-  console.log("Company options:", companyOptions) // Debug log
-  console.log("Selected company:", selectedCompany) // Debug current selection
-  console.log("Total releases:", releases.length) // Debug total releases
-  const fintechReleases = releases.filter(r => r.isFintech === true)
-  console.log("Fintech releases found:", fintechReleases.length) // Debug fintech releases
 
   const formatLastUpdated = (timestamp: number | null) => {
     if (!timestamp) return "Never"
@@ -87,7 +84,14 @@ export function ActivityFeed({
   return (
     <div className="flex flex-col h-full bg-background mobile-layout-fix">
       {/* Filter Tabs */}
-      <div className="p-4 sm:p-4 border-b border-border">
+      <div className="p-4 sm:p-4 border-b border-border relative">
+        {/* Background refresh indicator */}
+        {isBackgroundRefreshing && (
+          <div className="absolute top-2 right-2 z-10">
+            <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground opacity-50" />
+          </div>
+        )}
+        
         {/* Company Filter Buttons - Responsive mobile-optimized tags */}
         <div className="mb-3">
           <ScrollArea className="w-full">

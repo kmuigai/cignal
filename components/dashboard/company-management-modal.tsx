@@ -16,7 +16,7 @@ interface CompanyManagementModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onAPIKeyChange?: (hasKey: boolean) => void
-  onCompaniesChange?: () => void
+  onCompaniesChange?: (newCompanies?: Company[]) => void
 }
 
 export function CompanyManagementModal({ open, onOpenChange, onAPIKeyChange, onCompaniesChange }: CompanyManagementModalProps) {
@@ -59,26 +59,30 @@ export function CompanyManagementModal({ open, onOpenChange, onAPIKeyChange, onC
         .map((v) => v.trim())
         .filter((v) => v.length > 0)
 
+      let updatedCompanies: Company[] = [...companies]
+      
       if (addingNew) {
-        await addCompany({
+        const newCompany = await addCompany({
           name: editForm.name.trim(),
           variations,
           website: "",
           industry: "",
         })
+        updatedCompanies = [...companies, newCompany]
       } else if (editingId) {
-        await updateCompany(editingId, {
+        const updated = await updateCompany(editingId, {
           name: editForm.name.trim(),
           variations,
         })
+        updatedCompanies = companies.map(c => c.id === editingId ? updated : c)
       }
 
       setEditingId(null)
       setAddingNew(false)
       setEditForm({ name: "", variations: "" })
       
-      // Notify parent that companies changed
-      onCompaniesChange?.()
+      // Notify parent with updated companies for optimistic updates
+      onCompaniesChange?.(updatedCompanies)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save company")
     } finally {
@@ -96,8 +100,9 @@ export function CompanyManagementModal({ open, onOpenChange, onAPIKeyChange, onC
   const handleDelete = async (companyId: string) => {
     try {
       await deleteCompany(companyId)
-      // Notify parent that companies changed
-      onCompaniesChange?.()
+      // Notify parent with updated companies list
+      const updatedCompanies = companies.filter(c => c.id !== companyId)
+      onCompaniesChange?.(updatedCompanies)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete company")
     }

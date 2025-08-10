@@ -5,7 +5,7 @@ import { Header } from "./header"
 import { ActivityFeed } from "./activity-feed"
 import { PressReleaseDetail } from "./press-release-detail"
 import { APIKeyBannerWrapper } from "./api-key-warning-banner"
-import type { PressRelease } from "@/lib/types"
+import type { PressRelease, Company } from "@/lib/types"
 import { CompanyManagementModal } from "./company-management-modal"
 import { useEnhancedPressReleases } from "@/hooks/use-enhanced-press-releases"
 import { convertRSSItemToPressRelease } from "@/lib/rss-to-press-release"
@@ -13,6 +13,7 @@ import { readStatusManager } from "@/lib/read-status"
 import { bookmarkManager } from "@/lib/bookmark-manager"
 import { claudeAPIKeyManager } from "@/lib/claude-api-key"
 import { useCompanies } from "@/hooks/use-companies"
+import { pressReleasesCache } from "@/lib/cache"
 
 interface DashboardProps {
   user: any
@@ -32,18 +33,30 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
   
   // Mobile state management
   const [mobileView, setMobileView] = useState<'feed' | 'detail'>('feed')
+  
+  // Background refresh state for smooth updates
+  const [isBackgroundRefreshing, setIsBackgroundRefreshing] = useState(false)
+  const [localCompanies, setLocalCompanies] = useState<Company[]>([])
 
   // Use the companies hook with proper error handling
-  const { companies, loading: companiesLoading, error: companiesError } = useCompanies()
+  const { companies, loading: companiesLoading, error: companiesError, refetch: refetchCompanies } = useCompanies()
 
-  // Use the enhanced hook with caching - pass safe companies array
+  // Sync local companies with fetched companies
+  useEffect(() => {
+    if (Array.isArray(companies)) {
+      setLocalCompanies(companies)
+    }
+  }, [companies])
+
+  // Use the enhanced hook with caching - pass local companies for immediate updates
   const {
     data: rssData,
     loading: rssLoading,
     error: rssError,
     lastUpdated,
     refresh,
-  } = useEnhancedPressReleases(Array.isArray(companies) ? companies : [])
+    silentRefresh,
+  } = useEnhancedPressReleases(localCompanies)
 
   // Optimized API key check with caching and error handling
   useEffect(() => {
@@ -87,7 +100,7 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
   const pressReleases: PressRelease[] =
     rssData?.items?.map((item, index) => {
       // Enhanced hook already returns items in the right format, just need to convert to PressRelease
-      const matchedCompany = Array.isArray(companies) ? companies.find((c) => c.name === item.matchedCompany) : null
+      const matchedCompany = localCompanies.find((c) => c.name === item.matchedCompany)
       const companyId = matchedCompany?.id || item.companyId || "unknown"
 
       return {
@@ -130,7 +143,7 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
             return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
           })
       : pressReleases.filter((release) => {
-          const company = Array.isArray(companies) ? companies.find((c) => c.id === release.companyId) : null
+          const company = localCompanies.find((c) => c.id === release.companyId)
           return company?.name === selectedCompany
         })
 
@@ -257,7 +270,7 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
         `}>
           <ActivityFeed
             releases={filteredReleases}
-            companies={companies} // Now guaranteed to be an array
+            companies={localCompanies}
             selectedCompany={selectedCompany}
             onCompanyChange={setSelectedCompany}
             selectedReleaseId={selectedRelease?.id}
@@ -266,6 +279,7 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
             lastUpdated={lastUpdated}
             onRefresh={refresh}
             refreshing={rssLoading}
+            isBackgroundRefreshing={isBackgroundRefreshing}
           />
         </div>
 
@@ -278,7 +292,7 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
           {selectedRelease ? (
             <PressReleaseDetail
               release={selectedRelease}
-              company={Array.isArray(companies) ? companies.find((c) => c.id === selectedRelease.companyId) : undefined}
+              company={localCompanies.find((c) => c.id === selectedRelease.companyId)}
               isBookmarked={bookmarkedReleases.has(selectedRelease.id)}
               onToggleBookmark={() => toggleBookmark(selectedRelease.id)}
               onBackToFeed={handleBackToFeed}
@@ -297,10 +311,24 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         onAPIKeyChange={handleAPIKeyChange}
-        onCompaniesChange={() => {
-          // Force refresh press releases when companies change
-          console.log("🔄 Companies changed - refreshing press releases")
-          refresh()
+        onCompaniesChange={async (newCompanies?: Company[]) => {
+          console.log("🔄 Companies changed - updating optimistically")
+          
+          // If new companies are provided, update local state immediately
+          if (newCompanies) {
+            setLocalCompanies(newCompanies)
+            // Clear cache for the new company configuration
+            pressReleasesCache.clear()
+          } else {
+            // Otherwise refetch from database
+            await refetchCompanies()
+          }
+          
+          // Trigger background refresh without loading state
+          setIsBackgroundRefreshing(true)
+          silentRefresh?.().finally(() => {
+            setIsBackgroundRefreshing(false)
+          })
         }}
       />
     </div>

@@ -64,7 +64,7 @@ export function useEnhancedPressReleases(companies: Company[]) {
   const companiesKey = generateCompaniesKey(companies.map((c) => ({ name: c.name, variations: c.variations })))
 
   const fetchEnhancedReleases = useCallback(
-    async (forceRefresh = false) => {
+    async (forceRefresh = false, silent = false) => {
       if (companies.length === 0) {
         setData({ 
           items: [], 
@@ -74,7 +74,7 @@ export function useEnhancedPressReleases(companies: Company[]) {
           storedItems: 0,
           userCompanies: [] 
         })
-        setLoading(false)
+        if (!silent) setLoading(false)
         setLastUpdated(Date.now())
         return
       }
@@ -85,7 +85,7 @@ export function useEnhancedPressReleases(companies: Company[]) {
          if (cachedData) {
            console.log("📦 Using cached enhanced press releases data")
            setData(cachedData)
-           setLoading(false)
+           if (!silent) setLoading(false)
            setError(null)
            const cacheTimestamp = pressReleasesCache.getTimestamp(companiesKey + '-enhanced')
            setLastUpdated(cacheTimestamp)
@@ -93,7 +93,8 @@ export function useEnhancedPressReleases(companies: Company[]) {
          }
       }
 
-      setLoading(true)
+      // Only show loading state if not a silent refresh
+      if (!silent) setLoading(true)
       setError(null)
 
       try {
@@ -178,7 +179,7 @@ export function useEnhancedPressReleases(companies: Company[]) {
         console.error("Error fetching enhanced press releases:", err)
         setError(err instanceof Error ? err.message : "Failed to fetch press releases")
       } finally {
-        setLoading(false)
+        if (!silent) setLoading(false)
       }
     },
     [companies, companiesKey],
@@ -194,6 +195,11 @@ export function useEnhancedPressReleases(companies: Company[]) {
     fetchEnhancedReleases(true)
   }, [fetchEnhancedReleases])
 
+  // Silent refresh function (no loading state)
+  const silentRefresh = useCallback(() => {
+    return fetchEnhancedReleases(true, true)
+  }, [fetchEnhancedReleases])
+
   return {
     data,
     loading,
@@ -201,6 +207,7 @@ export function useEnhancedPressReleases(companies: Company[]) {
     lastUpdated,
     refetch: fetchEnhancedReleases,
     refresh,
+    silentRefresh,
   }
 }
 
