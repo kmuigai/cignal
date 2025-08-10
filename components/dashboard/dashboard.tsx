@@ -344,16 +344,17 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
                 console.log("🔄 Processing companies now:", Array.from(newSet))
                 return newSet
               })
+              
+              // Set a timer to clear processing state (fallback if refresh doesn't complete)
+              setTimeout(() => {
+                setProcessingCompanies(prev => {
+                  const newSet = new Set(prev)
+                  newSet.delete(addedCompanyName)
+                  console.log("⏰ Timer: clearing processing for", addedCompanyName)
+                  return newSet
+                })
+              }, 10000) // 10 second fallback
             }
-            
-            // Trigger background refresh without loading state
-            setIsBackgroundRefreshing(true)
-            silentRefresh?.().finally(() => {
-              setIsBackgroundRefreshing(false)
-              // Clear processing state for all companies when refresh completes
-              console.log("✅ Clearing processing companies")
-              setProcessingCompanies(new Set())
-            })
           }
         }}
       />

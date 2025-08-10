@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import type { Company } from "@/lib/types"
 import { pressReleasesCache, generateCompaniesKey } from "@/lib/cache"
 
@@ -189,6 +189,27 @@ export function useEnhancedPressReleases(companies: Company[]) {
   useEffect(() => {
     fetchEnhancedReleases()
   }, [fetchEnhancedReleases])
+  
+  // Previous companies reference to detect actual changes
+  const prevCompaniesRef = useRef<Company[]>([])
+  
+  // Auto-refresh when companies list actually changes
+  useEffect(() => {
+    // Check if companies actually changed (not just re-render)
+    const currentCompaniesKey = JSON.stringify(companies.map(c => ({ name: c.name, variations: c.variations })))
+    const prevCompaniesKey = JSON.stringify(prevCompaniesRef.current.map(c => ({ name: c.name, variations: c.variations })))
+    
+    if (companies.length > 0 && currentCompaniesKey !== prevCompaniesKey) {
+      console.log("👥 Companies actually changed in hook, triggering silent refresh")
+      console.log("📋 Previous:", prevCompaniesRef.current.map(c => c.name))
+      console.log("📋 Current:", companies.map(c => c.name))
+      
+      prevCompaniesRef.current = companies
+      fetchEnhancedReleases(true, true) // Force refresh, silent mode
+    } else if (companies.length === 0) {
+      prevCompaniesRef.current = []
+    }
+  }, [companies, fetchEnhancedReleases])
 
   // Manual refresh function
   const refresh = useCallback(() => {
