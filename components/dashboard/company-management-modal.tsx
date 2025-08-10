@@ -15,7 +15,7 @@ interface CompanyManagementModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onAPIKeyChange?: (hasKey: boolean) => void
-  onCompaniesChange?: (newCompanies?: Company[]) => void
+  onCompaniesChange?: (newCompanies?: Company[], addedCompanyName?: string) => void
   companies: Company[]
   addCompany: (company: Omit<Company, "id" | "userId" | "createdAt" | "updatedAt">) => Promise<Company>
   updateCompany: (id: string, updates: Partial<Company>) => Promise<Company>
@@ -71,15 +71,18 @@ export function CompanyManagementModal({
         .filter((v) => v.length > 0)
 
       let updatedCompanies: Company[] = [...companies]
+      let addedCompanyName: string | undefined = undefined
       
       if (addingNew) {
+        const companyName = editForm.name.trim()
         const newCompany = await addCompany({
-          name: editForm.name.trim(),
+          name: companyName,
           variations,
           website: "",
           industry: "",
         })
         updatedCompanies = [...companies, newCompany]
+        addedCompanyName = companyName
       } else if (editingId) {
         const updated = await updateCompany(editingId, {
           name: editForm.name.trim(),
@@ -93,7 +96,7 @@ export function CompanyManagementModal({
       setEditForm({ name: "", variations: "" })
       
       // Notify parent with updated companies for optimistic updates
-      onCompaniesChange?.(updatedCompanies)
+      onCompaniesChange?.(updatedCompanies, addedCompanyName)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save company")
     } finally {

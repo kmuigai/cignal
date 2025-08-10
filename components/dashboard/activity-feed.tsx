@@ -24,6 +24,7 @@ interface ActivityFeedProps {
   onRefresh: () => void
   refreshing: boolean
   isBackgroundRefreshing?: boolean
+  processingCompanies?: Set<string>
 }
 
 export function ActivityFeed({
@@ -38,6 +39,7 @@ export function ActivityFeed({
   onRefresh,
   refreshing,
   isBackgroundRefreshing = false,
+  processingCompanies = new Set(),
 }: ActivityFeedProps) {
   // Safe array operations with null checks
   const safeCompanies = Array.isArray(companies) ? companies : []
@@ -96,30 +98,39 @@ export function ActivityFeed({
         <div className="mb-3">
           <ScrollArea className="w-full">
             <div className="flex gap-1 xs:gap-1.5 sm:gap-2 pb-2 min-w-max">
-              {companyOptions.map((company) => (
-                <Button
-                  key={company}
-                  variant={selectedCompany === company ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => onCompanyChange(company)}
-                  className={cn(
-                    // Responsive text sizing - smaller on mobile, larger on desktop
-                    "text-[10px] xs:text-[11px] sm:text-xs",
-                    // Responsive padding - tighter on mobile
-                    "px-1.5 xs:px-2 sm:px-3",
-                    // Responsive height while maintaining touch targets
-                    "h-8 sm:h-9",
-                    // Core styling
-                    "shrink-0 min-w-fit font-medium",
-                    // Mobile touch optimization
-                    "mobile-touch-target touch-manipulation",
-                    // Ensure readability with proper contrast
-                    "transition-all duration-200"
-                  )}
-                >
-                  {company}
-                </Button>
-              ))}
+              {companyOptions.map((company) => {
+                const isProcessing = processingCompanies.has(company)
+                
+                return (
+                  <Button
+                    key={company}
+                    variant={selectedCompany === company ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => onCompanyChange(company)}
+                    className={cn(
+                      // Responsive text sizing - smaller on mobile, larger on desktop
+                      "text-[10px] xs:text-[11px] sm:text-xs",
+                      // Responsive padding - tighter on mobile
+                      "px-1.5 xs:px-2 sm:px-3",
+                      // Responsive height while maintaining touch targets
+                      "h-8 sm:h-9",
+                      // Core styling
+                      "shrink-0 min-w-fit font-medium",
+                      // Mobile touch optimization
+                      "mobile-touch-target touch-manipulation",
+                      // Ensure readability with proper contrast
+                      "transition-all duration-200"
+                    )}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      {isProcessing && (
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                      )}
+                      {company}
+                    </div>
+                  </Button>
+                )
+              })}
             </div>
           </ScrollArea>
         </div>

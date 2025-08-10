@@ -37,6 +37,7 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
   // Background refresh state for smooth updates
   const [isBackgroundRefreshing, setIsBackgroundRefreshing] = useState(false)
   const [localCompanies, setLocalCompanies] = useState<Company[]>([])
+  const [processingCompanies, setProcessingCompanies] = useState<Set<string>>(new Set())
 
   // Use the companies hook with proper error handling
   const { 
@@ -288,6 +289,7 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
             onRefresh={refresh}
             refreshing={rssLoading}
             isBackgroundRefreshing={isBackgroundRefreshing}
+            processingCompanies={processingCompanies}
           />
         </div>
 
@@ -323,7 +325,7 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
         addCompany={addCompany}
         updateCompany={updateCompany}
         deleteCompany={deleteCompany}
-        onCompaniesChange={async (newCompanies?: Company[]) => {
+        onCompaniesChange={async (newCompanies?: Company[], addedCompanyName?: string) => {
           console.log("🔄 Companies changed - updating optimistically")
           
           // Update local state immediately with new companies
@@ -332,10 +334,17 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
             // Clear cache for the new company configuration
             pressReleasesCache.clear()
             
+            // If a specific company was added, mark it as processing
+            if (addedCompanyName) {
+              setProcessingCompanies(prev => new Set(prev).add(addedCompanyName))
+            }
+            
             // Trigger background refresh without loading state
             setIsBackgroundRefreshing(true)
             silentRefresh?.().finally(() => {
               setIsBackgroundRefreshing(false)
+              // Clear processing state for all companies when refresh completes
+              setProcessingCompanies(new Set())
             })
           }
         }}
