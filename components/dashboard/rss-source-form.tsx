@@ -309,12 +309,12 @@ export function RSSSourceForm({ source, onSubmit, onCancel, onTestUrl }: RSSSour
         <div>
           <Label className="text-sm font-medium mb-2 block">Feed Type</Label>
           <Select value={formData.feedType} onValueChange={(value: RSSSource['feedType']) => setFormData({ ...formData, feedType: value })}>
-            <SelectTrigger disabled={saving}>
+            <SelectTrigger disabled={saving} className="w-full text-left">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent align="start">
               {FEED_TYPES.map((type) => (
-                <SelectItem key={type.value} value={type.value}>
+                <SelectItem key={type.value} value={type.value} className="text-left">
                   <div>
                     <div className="font-medium">{type.label}</div>
                     <div className="text-xs text-gray-500">{type.description}</div>

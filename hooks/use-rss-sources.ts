@@ -25,7 +25,11 @@ export function useRSSSourcesByCompany(companyId: string): UseRSSSourcesResult {
 
   // Fetch RSS sources for the company
   const fetchSources = useCallback(async () => {
-    if (!companyId) return
+    if (!companyId) {
+      setSources([])
+      setLoading(false)
+      return
+    }
 
     setLoading(true)
     setError(null)
@@ -34,7 +38,28 @@ export function useRSSSourcesByCompany(companyId: string): UseRSSSourcesResult {
       const response = await fetch(`/api/companies/${companyId}/rss-sources`)
       
       if (!response.ok) {
-        throw new Error(`Failed to fetch RSS sources: ${response.statusText}`)
+        let errorMessage = `Failed to fetch RSS sources: ${response.statusText}`
+        
+        // Try to get more specific error from response body
+        try {
+          const errorData = await response.json()
+          if (errorData.error) {
+            errorMessage = errorData.error
+          }
+        } catch {
+          // Ignore JSON parsing errors, use generic message
+        }
+        
+        // Add more context for common errors
+        if (response.status === 401) {
+          errorMessage = 'Not authorized - please check if you are logged in'
+        } else if (response.status === 403) {
+          errorMessage = 'Access denied - company may not belong to your account'
+        } else if (response.status === 404) {
+          errorMessage = 'Company not found'
+        }
+        
+        throw new Error(errorMessage)
       }
 
       const result = await response.json()
@@ -42,7 +67,11 @@ export function useRSSSourcesByCompany(companyId: string): UseRSSSourcesResult {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error'
       setError(errorMessage)
-      console.error('Error fetching RSS sources:', err)
+      console.error('Error fetching RSS sources:', {
+        companyId,
+        error: err,
+        url: `/api/companies/${companyId}/rss-sources`
+      })
     } finally {
       setLoading(false)
     }
