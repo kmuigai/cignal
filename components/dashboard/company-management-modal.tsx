@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Pencil, Trash2, Plus } from "lucide-react"
 import type { Company } from "@/lib/types"
-import { useCompanies } from "@/hooks/use-companies"
 import { AIConfigurationSection } from "./ai-configuration-section"
 
 interface CompanyManagementModalProps {
@@ -17,10 +16,22 @@ interface CompanyManagementModalProps {
   onOpenChange: (open: boolean) => void
   onAPIKeyChange?: (hasKey: boolean) => void
   onCompaniesChange?: (newCompanies?: Company[]) => void
+  companies: Company[]
+  addCompany: (company: Omit<Company, "id" | "userId" | "createdAt" | "updatedAt">) => Promise<Company>
+  updateCompany: (id: string, updates: Partial<Company>) => Promise<Company>
+  deleteCompany: (id: string) => Promise<void>
 }
 
-export function CompanyManagementModal({ open, onOpenChange, onAPIKeyChange, onCompaniesChange }: CompanyManagementModalProps) {
-  const { companies, addCompany, updateCompany, deleteCompany } = useCompanies()
+export function CompanyManagementModal({ 
+  open, 
+  onOpenChange, 
+  onAPIKeyChange, 
+  onCompaniesChange,
+  companies,
+  addCompany,
+  updateCompany,
+  deleteCompany 
+}: CompanyManagementModalProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [addingNew, setAddingNew] = useState(false)
   const [editForm, setEditForm] = useState({ name: "", variations: "" })

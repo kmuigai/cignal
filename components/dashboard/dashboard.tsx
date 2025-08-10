@@ -39,7 +39,15 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
   const [localCompanies, setLocalCompanies] = useState<Company[]>([])
 
   // Use the companies hook with proper error handling
-  const { companies, loading: companiesLoading, error: companiesError, refetch: refetchCompanies } = useCompanies()
+  const { 
+    companies, 
+    loading: companiesLoading, 
+    error: companiesError, 
+    refetch: refetchCompanies,
+    addCompany,
+    updateCompany,
+    deleteCompany 
+  } = useCompanies()
 
   // Sync local companies with fetched companies
   useEffect(() => {
@@ -311,24 +319,25 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         onAPIKeyChange={handleAPIKeyChange}
+        companies={companies}
+        addCompany={addCompany}
+        updateCompany={updateCompany}
+        deleteCompany={deleteCompany}
         onCompaniesChange={async (newCompanies?: Company[]) => {
           console.log("🔄 Companies changed - updating optimistically")
           
-          // If new companies are provided, update local state immediately
+          // Update local state immediately with new companies
           if (newCompanies) {
             setLocalCompanies(newCompanies)
             // Clear cache for the new company configuration
             pressReleasesCache.clear()
-          } else {
-            // Otherwise refetch from database
-            await refetchCompanies()
+            
+            // Trigger background refresh without loading state
+            setIsBackgroundRefreshing(true)
+            silentRefresh?.().finally(() => {
+              setIsBackgroundRefreshing(false)
+            })
           }
-          
-          // Trigger background refresh without loading state
-          setIsBackgroundRefreshing(true)
-          silentRefresh?.().finally(() => {
-            setIsBackgroundRefreshing(false)
-          })
         }}
       />
     </div>
