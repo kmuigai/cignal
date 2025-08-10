@@ -153,7 +153,12 @@ const FINTECH_KEYWORDS: FintechKeywordSet[] = [
       'stock market', 'nasdaq', 'nyse', 'exchange',
       'trading', 'securities', 'equities', 'bonds',
       'market cap', 'market capitalization',
-      'earnings', 'revenue', 'ebitda', 'profit margin'
+      'earnings', 'revenue', 'ebitda', 'profit margin',
+      // Add major tech companies and business terms
+      'apple', 'tesla', 'amazon', 'google', 'microsoft', 'meta',
+      'openai', 'chatgpt', 'artificial intelligence', 'ai',
+      'technology', 'tech company', 'silicon valley',
+      'business', 'enterprise', 'corporate', 'ceo', 'cfo'
     ],
     patterns: [
       /\bIPO\b/g,
@@ -161,7 +166,10 @@ const FINTECH_KEYWORDS: FintechKeywordSet[] = [
       /\bSPAC\b/g,
       /\bM&A\b/g,
       /(merger|acquisition|acquire)/gi,
-      /\$\d+(\.\d+)?[BM]\s+(acquisition|merger|deal)/gi
+      /\$\d+(\.\d+)?[BM]\s+(acquisition|merger|deal)/gi,
+      /(apple|tesla|amazon|google|microsoft|meta)\s+(earnings|revenue|stock|announces)/gi,
+      /(tech|technology)\s+(earnings|results|performance)/gi,
+      /\b(AI|artificial intelligence)\b/gi
     ]
   },
   {

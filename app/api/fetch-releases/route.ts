@@ -492,10 +492,22 @@ export async function GET(request: Request) {
           }
         })
         .filter((item) => {
+          // Keep items that mention specific companies
           if (item.relevanceScore && item.relevanceScore > 0) {
             companyMatches++
             return true
           }
+          
+          // Also keep RSS articles that are fintech-relevant (even if they don't mention specific companies)
+          if (item.feedSource && item.feedSource !== 'general' && item.isFintech) {
+            return true
+          }
+          
+          // Keep RSS articles from company-specific feeds regardless of fintech detection
+          if (item.feedSource && item.feedSource !== 'general' && item.sourceName !== 'PR Newswire Main') {
+            return true
+          }
+          
           return false
         })
     }
