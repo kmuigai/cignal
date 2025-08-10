@@ -102,6 +102,7 @@ export function useEnhancedPressReleases(companies: Company[]) {
 
         // Prepare companies data for API calls
         const companiesData = companies.map((company) => ({
+          id: company.id,
           name: company.name,
           variations: company.variations,
         }))

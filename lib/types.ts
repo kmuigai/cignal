@@ -9,6 +9,52 @@ export interface Company {
   updatedAt: string
 }
 
+// RSS Source for company-specific feeds
+export interface RSSSource {
+  id: string
+  companyId: string
+  userId: string
+  feedUrl: string
+  feedName: string
+  feedType: 'ir-news' | 'sec-filings' | 'general-news' | 'industry' | 'custom'
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+  lastFetchedAt?: string
+  lastError?: string
+  articleCount: number
+  successRate: number
+}
+
+// For creating/updating RSS sources
+export interface CreateRSSSource {
+  feedUrl: string
+  feedName: string
+  feedType: RSSSource['feedType']
+  enabled?: boolean
+}
+
+export interface UpdateRSSSource {
+  feedUrl?: string
+  feedName?: string
+  feedType?: RSSSource['feedType']
+  enabled?: boolean
+  lastFetchedAt?: string
+  lastError?: string
+  articleCount?: number
+  successRate?: number
+}
+
+// RSS validation result
+export interface RSSValidationResult {
+  valid: boolean
+  title?: string
+  description?: string
+  itemCount?: number
+  error?: string
+  detectedType?: RSSSource['feedType']
+}
+
 // Current in-memory press release (from RSS)
 export interface PressRelease {
   id: string

@@ -1,6 +1,7 @@
 import { createClientComponentClient } from "@/lib/supabase/client"
 import { encryption } from "../encryption"
-import type { Company } from "../types"
+import type { Company, RSSSource, CreateRSSSource, UpdateRSSSource, RSSValidationResult } from "../types"
+import { validateRSSSourceData, testRSSConnectivity } from "../rss-validation"
 
 // Database types
 export interface DatabaseCompany {
@@ -36,6 +37,22 @@ export interface DatabaseReadStatus {
   user_id: string
   press_release_id: string
   created_at: string
+}
+
+export interface DatabaseRSSSource {
+  id: string
+  company_id: string
+  user_id: string
+  feed_url: string
+  feed_name: string
+  feed_type: string
+  enabled: boolean
+  created_at: string
+  updated_at: string
+  last_fetched_at: string | null
+  last_error: string | null
+  article_count: number
+  success_rate: number
 }
 
 // Company Management
@@ -463,8 +480,200 @@ export class ReadStatusManager {
   }
 }
 
+// RSS Source Management
+export class RSSSourceManager {
+  private supabase = createClientComponentClient()
+
+  async getRSSSourcesByCompany(companyId: string): Promise<RSSSource[]> {
+    const {
+      data: { user },
+    } = await this.supabase.auth.getUser()
+    if (!user) throw new Error("User not authenticated")
+
+    const { data, error } = await this.supabase
+      .from("rss_sources")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true })
+
+    if (error) throw error
+
+    return data.map(this.mapDatabaseToRSSSource)
+  }
+
+  async getAllRSSSourcesByUser(): Promise<RSSSource[]> {
+    const {
+      data: { user },
+    } = await this.supabase.auth.getUser()
+    if (!user) throw new Error("User not authenticated")
+
+    const { data, error } = await this.supabase
+      .from("rss_sources")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("enabled", true)
+      .order("company_id", { ascending: true })
+
+    if (error) throw error
+
+    return data.map(this.mapDatabaseToRSSSource)
+  }
+
+  async createRSSSource(companyId: string, source: CreateRSSSource): Promise<RSSSource> {
+    const {
+      data: { user },
+    } = await this.supabase.auth.getUser()
+    if (!user) throw new Error("User not authenticated")
+
+    // Validate the source data
+    const validation = validateRSSSourceData({
+      feedUrl: source.feedUrl,
+      feedName: source.feedName,
+      feedType: source.feedType,
+    })
+
+    if (!validation.valid) {
+      throw new Error(`Validation failed: ${validation.errors.join(', ')}`)
+    }
+
+    const { data, error } = await this.supabase
+      .from("rss_sources")
+      .insert({
+        company_id: companyId,
+        user_id: user.id,
+        feed_url: source.feedUrl,
+        feed_name: source.feedName,
+        feed_type: source.feedType,
+        enabled: source.enabled ?? true,
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+
+    return this.mapDatabaseToRSSSource(data)
+  }
+
+  async updateRSSSource(id: string, updates: UpdateRSSSource): Promise<RSSSource> {
+    const {
+      data: { user },
+    } = await this.supabase.auth.getUser()
+    if (!user) throw new Error("User not authenticated")
+
+    // If URL/name/type are being updated, validate them
+    if (updates.feedUrl || updates.feedName || updates.feedType) {
+      // Get current data to fill in missing validation fields
+      const { data: currentData } = await this.supabase
+        .from("rss_sources")
+        .select("feed_url, feed_name, feed_type")
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .single()
+
+      if (currentData) {
+        const validation = validateRSSSourceData({
+          feedUrl: updates.feedUrl ?? currentData.feed_url,
+          feedName: updates.feedName ?? currentData.feed_name,
+          feedType: updates.feedType ?? currentData.feed_type,
+        })
+
+        if (!validation.valid) {
+          throw new Error(`Validation failed: ${validation.errors.join(', ')}`)
+        }
+      }
+    }
+
+    const { data, error } = await this.supabase
+      .from("rss_sources")
+      .update({
+        feed_url: updates.feedUrl,
+        feed_name: updates.feedName,
+        feed_type: updates.feedType,
+        enabled: updates.enabled,
+        last_fetched_at: updates.lastFetchedAt,
+        last_error: updates.lastError,
+        article_count: updates.articleCount,
+        success_rate: updates.successRate,
+      })
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    return this.mapDatabaseToRSSSource(data)
+  }
+
+  async deleteRSSSource(id: string): Promise<void> {
+    const {
+      data: { user },
+    } = await this.supabase.auth.getUser()
+    if (!user) throw new Error("User not authenticated")
+
+    const { error } = await this.supabase
+      .from("rss_sources")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id)
+
+    if (error) throw error
+  }
+
+  async testRSSFeed(feedUrl: string): Promise<RSSValidationResult> {
+    // Use client-side validation for basic testing
+    // For production, this should hit a server-side API endpoint
+    return await testRSSConnectivity(feedUrl)
+  }
+
+  async updateFeedMetrics(id: string, metrics: {
+    lastFetchedAt?: string
+    lastError?: string
+    articleCount?: number
+    successRate?: number
+  }): Promise<void> {
+    const {
+      data: { user },
+    } = await this.supabase.auth.getUser()
+    if (!user) throw new Error("User not authenticated")
+
+    const { error } = await this.supabase
+      .from("rss_sources")
+      .update({
+        last_fetched_at: metrics.lastFetchedAt,
+        last_error: metrics.lastError,
+        article_count: metrics.articleCount,
+        success_rate: metrics.successRate,
+      })
+      .eq("id", id)
+      .eq("user_id", user.id)
+
+    if (error) throw error
+  }
+
+  private mapDatabaseToRSSSource(dbSource: DatabaseRSSSource): RSSSource {
+    return {
+      id: dbSource.id,
+      companyId: dbSource.company_id,
+      userId: dbSource.user_id,
+      feedUrl: dbSource.feed_url,
+      feedName: dbSource.feed_name,
+      feedType: dbSource.feed_type as RSSSource['feedType'],
+      enabled: dbSource.enabled,
+      createdAt: dbSource.created_at,
+      updatedAt: dbSource.updated_at,
+      lastFetchedAt: dbSource.last_fetched_at || undefined,
+      lastError: dbSource.last_error || undefined,
+      articleCount: dbSource.article_count,
+      successRate: dbSource.success_rate,
+    }
+  }
+}
+
 // Export singleton instances
 export const companyManager = new CompanyManager()
 export const userProfileManager = new UserProfileManager()
 export const bookmarkManager = new BookmarkManager()
 export const readStatusManager = new ReadStatusManager()
+export const rssSourceManager = new RSSSourceManager()

@@ -16,10 +16,7 @@ CREATE TABLE IF NOT EXISTS rss_sources (
   last_fetched_at TIMESTAMP WITH TIME ZONE,
   last_error TEXT,
   article_count INTEGER DEFAULT 0,
-  success_rate DECIMAL(5,2) DEFAULT 100.00,
-  -- Ensure user can only access their own RSS sources
-  CONSTRAINT rss_sources_user_company_check 
-    CHECK (user_id = (SELECT user_id FROM companies WHERE id = company_id))
+  success_rate DECIMAL(5,2) DEFAULT 100.00
 );
 
 -- Step 2: Add performance indexes (matching existing pattern)
@@ -48,6 +45,26 @@ CREATE POLICY "Users can delete own RSS sources" ON rss_sources
 -- Step 5: Add updated_at trigger (using existing function)
 CREATE TRIGGER update_rss_sources_updated_at BEFORE UPDATE ON rss_sources
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Step 5b: Add data integrity trigger (replaces the check constraint)
+CREATE OR REPLACE FUNCTION validate_rss_source_ownership()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Ensure the user_id matches the company's user_id
+  IF NOT EXISTS (
+    SELECT 1 FROM companies 
+    WHERE id = NEW.company_id AND user_id = NEW.user_id
+  ) THEN
+    RAISE EXCEPTION 'User does not own the specified company';
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER validate_rss_source_ownership_trigger
+  BEFORE INSERT OR UPDATE ON rss_sources
+  FOR EACH ROW EXECUTE FUNCTION validate_rss_source_ownership();
 
 -- Step 6: Insert some default RSS sources for testing (optional)
 -- Uncomment these lines if you want default sources for existing companies

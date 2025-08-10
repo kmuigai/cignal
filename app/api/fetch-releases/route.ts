@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { getFeedsForCompanies, getFeedDisplayName } from "@/lib/rss-sources"
 import { detectFintechContent } from "@/lib/fintech-detector"
+import { createRouteHandlerClient } from '@/lib/supabase/server'
+import { rssSourceManager } from '@/lib/supabase/database'
 
 interface RSSItem {
   title: string
@@ -223,7 +225,10 @@ function parseRSSXML(xmlText: string, feedSource: string, feedType: string, sour
 }
 
 async function fetchSingleFeed(feed: any): Promise<FeedResult> {
-  const displayName = getFeedDisplayName(feed.sourceName, feed.type)
+  // Handle both general feeds and company-specific RSS sources
+  const displayName = 'displayName' in feed 
+    ? feed.displayName 
+    : getFeedDisplayName(feed.sourceName, feed.type)
 
   try {
     console.log(`Fetching ${displayName}...`)
@@ -382,7 +387,7 @@ export async function GET(request: Request) {
     const companiesParam = searchParams.get("companies")
 
     // Parse companies from query parameter
-    let userCompanies: Array<{ name: string; variations: string[] }> = []
+    let userCompanies: Array<{ id: string; name: string; variations: string[] }> = []
     if (companiesParam) {
       try {
         userCompanies = JSON.parse(companiesParam)
@@ -394,13 +399,61 @@ export async function GET(request: Request) {
     console.log("🚀 Fetching RSS feeds...")
     console.log(`📊 User companies: ${userCompanies.map((c) => c.name).join(", ")}`)
 
-    // Get feeds based on tracked companies (currently only general feeds)
+    // Get general feeds
     const companyNames = userCompanies.map((c) => c.name)
-    const feedsToFetch = getFeedsForCompanies(companyNames)
+    const generalFeeds = getFeedsForCompanies(companyNames)
+    
+    // Get company-specific RSS sources from database
+    let companyFeeds: Array<{ type: string; url: string; displayName: string; sourceName: string; companyId: string }> = []
+    
+    if (userCompanies.length > 0) {
+      try {
+        const supabase = createRouteHandlerClient(request)
+        const { data: { user } } = await supabase.auth.getUser()
+        
+        if (user) {
+          // Get all RSS sources for all user companies
+          for (const company of userCompanies) {
+            try {
+              const rssSources = await rssSourceManager.getRSSSourcesByCompany(company.id)
+              
+              // Convert RSS sources to feed format
+              for (const source of rssSources) {
+                if (source.enabled) {
+                  companyFeeds.push({
+                    type: source.feedType,
+                    url: source.feedUrl,
+                    displayName: source.feedName,
+                    sourceName: company.name,
+                    companyId: company.id
+                  })
+                }
+              }
+            } catch (error) {
+              console.warn(`Failed to fetch RSS sources for company ${company.name}:`, error)
+            }
+          }
+        }
+      } catch (error) {
+        console.warn("Failed to fetch company RSS sources:", error)
+      }
+    }
+
+    // Combine general and company-specific feeds
+    const feedsToFetch = [
+      ...generalFeeds,
+      ...companyFeeds
+    ]
 
     console.log(`📡 Fetching ${feedsToFetch.length} feeds:`)
     feedsToFetch.forEach((feed) => {
-      console.log(`  - ${getFeedDisplayName(feed.sourceName, feed.type)}`)
+      if ('displayName' in feed) {
+        // Company-specific RSS source
+        console.log(`  - ${feed.displayName} (${feed.sourceName})`)
+      } else {
+        // General feed
+        console.log(`  - ${getFeedDisplayName(feed.sourceName, feed.type)}`)
+      }
     })
 
     // Fetch all feeds in parallel

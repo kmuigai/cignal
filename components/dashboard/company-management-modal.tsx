@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
-import { Pencil, Trash2, Plus } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Pencil, Trash2, Plus, Building2, Rss, Bot } from "lucide-react"
 import type { Company } from "@/lib/types"
 import { AIConfigurationSection } from "./ai-configuration-section"
+import { RSSSourcesSection } from "./rss-sources-section"
 
 interface CompanyManagementModalProps {
   open: boolean
@@ -32,6 +33,10 @@ export function CompanyManagementModal({
   updateCompany,
   deleteCompany 
 }: CompanyManagementModalProps) {
+  const [activeTab, setActiveTab] = useState("ai")
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(
+    companies.length > 0 ? companies[0].id : null
+  )
   const [editingId, setEditingId] = useState<string | null>(null)
   const [addingNew, setAddingNew] = useState(false)
   const [editForm, setEditForm] = useState({ name: "", variations: "" })
@@ -95,6 +100,14 @@ export function CompanyManagementModal({
       setAddingNew(false)
       setEditForm({ name: "", variations: "" })
       
+      // Update selected company if needed
+      if (addedCompanyName && !selectedCompanyId) {
+        const newCompany = updatedCompanies.find(c => c.name === addedCompanyName)
+        if (newCompany) {
+          setSelectedCompanyId(newCompany.id)
+        }
+      }
+      
       // Notify parent with updated companies for optimistic updates
       onCompaniesChange?.(updatedCompanies, addedCompanyName)
     } catch (err) {
@@ -124,26 +137,39 @@ export function CompanyManagementModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-bricolage font-semibold">Settings</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
-          {error && (
-            <div className="text-sm text-red-600 bg-red-50 dark:bg-red-950 dark:text-red-400 p-2 rounded">{error}</div>
-          )}
+        {error && (
+          <div className="text-sm text-red-600 bg-red-50 dark:bg-red-950 dark:text-red-400 p-2 rounded">{error}</div>
+        )}
 
-          {/* AI Configuration Section */}
-          <div>
-            <AIConfigurationSection onAPIKeyChange={onAPIKeyChange} />
-          </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="ai" className="flex items-center gap-2">
+              <Bot className="h-4 w-4" />
+              AI Settings
+            </TabsTrigger>
+            <TabsTrigger value="companies" className="flex items-center gap-2">
+              <Building2 className="h-4 w-4" />
+              Companies
+            </TabsTrigger>
+            <TabsTrigger value="rss" className="flex items-center gap-2">
+              <Rss className="h-4 w-4" />
+              RSS Sources
+            </TabsTrigger>
+          </TabsList>
 
-          <Separator />
+          <div className="mt-6">
+            <TabsContent value="ai" className="space-y-6">
+              <AIConfigurationSection onAPIKeyChange={onAPIKeyChange} />
+            </TabsContent>
 
-          {/* Company Management Section */}
-          <div>
-            <h3 className="font-medium mb-4">Company Management</h3>
+            <TabsContent value="companies" className="space-y-6">
+              <div>
+                <h3 className="font-medium mb-4">Company Management</h3>
 
             {/* Existing Companies */}
             <div className="space-y-3">
@@ -246,8 +272,18 @@ export function CompanyManagementModal({
                 Add Company
               </Button>
             )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="rss" className="space-y-6">
+              <RSSSourcesSection 
+                companies={companies}
+                selectedCompanyId={selectedCompanyId}
+                onCompanySelect={setSelectedCompanyId}
+              />
+            </TabsContent>
           </div>
-        </div>
+        </Tabs>
       </DialogContent>
     </Dialog>
   )
