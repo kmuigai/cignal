@@ -1,4 +1,5 @@
 import { createClientComponentClient } from "@/lib/supabase/client"
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { encryption } from "../encryption"
 import type { Company, RSSSource, CreateRSSSource, UpdateRSSSource, RSSValidationResult } from "../types"
 import { validateRSSSourceData, testRSSConnectivity } from "../rss-validation"
@@ -482,7 +483,11 @@ export class ReadStatusManager {
 
 // RSS Source Management
 export class RSSSourceManager {
-  private supabase = createClientComponentClient()
+  private supabase: SupabaseClient
+  
+  constructor(supabaseClient?: SupabaseClient) {
+    this.supabase = supabaseClient || createClientComponentClient()
+  }
 
   async getRSSSourcesByCompany(companyId: string): Promise<RSSSource[]> {
     try {

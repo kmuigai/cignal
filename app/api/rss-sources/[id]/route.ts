@@ -1,6 +1,6 @@
 import { createRouteHandlerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { rssSourceManager } from '@/lib/supabase/database'
+import { RSSSourceManager } from '@/lib/supabase/database'
 import type { UpdateRSSSource } from '@/lib/types'
 
 // PUT /api/rss-sources/:id - Update RSS source
@@ -34,6 +34,7 @@ export async function PUT(
     }
 
     // Update RSS source (RSSSourceManager handles user authorization)
+    const rssSourceManager = new RSSSourceManager(supabase)
     const updatedSource = await rssSourceManager.updateRSSSource(params.id, updates)
 
     return NextResponse.json({ source: updatedSource })
@@ -76,6 +77,7 @@ export async function DELETE(
     }
 
     // Delete RSS source (RSSSourceManager handles user authorization)
+    const rssSourceManager = new RSSSourceManager(supabase)
     await rssSourceManager.deleteRSSSource(params.id)
 
     return NextResponse.json({ success: true })

@@ -1,6 +1,6 @@
 import { createRouteHandlerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { rssSourceManager } from '@/lib/supabase/database'
+import { RSSSourceManager } from '@/lib/supabase/database'
 import type { CreateRSSSource } from '@/lib/types'
 
 // GET /api/companies/:id/rss-sources - Fetch all RSS sources for company
@@ -48,6 +48,7 @@ export async function GET(
 
     // Get RSS sources for the company
     try {
+      const rssSourceManager = new RSSSourceManager(supabase)
       const sources = await rssSourceManager.getRSSSourcesByCompany(params.id)
       console.log('[RSS Sources API] Found sources:', sources.length)
       return NextResponse.json({ sources })
@@ -111,6 +112,7 @@ export async function POST(
     }
 
     // Create RSS source
+    const rssSourceManager = new RSSSourceManager(supabase)
     const newSource = await rssSourceManager.createRSSSource(params.id, {
       feedUrl,
       feedName,

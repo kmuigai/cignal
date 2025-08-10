@@ -1,6 +1,6 @@
 import { createRouteHandlerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { rssSourceManager } from '@/lib/supabase/database'
+import { RSSSourceManager } from '@/lib/supabase/database'
 
 // POST /api/rss-sources/:id/test - Test RSS feed connectivity
 export async function POST(
@@ -33,6 +33,7 @@ export async function POST(
     }
 
     // Test the RSS feed
+    const rssSourceManager = new RSSSourceManager(supabase)
     const testResult = await rssSourceManager.testRSSFeed(source.feed_url)
 
     // Update the RSS source with test results if successful
