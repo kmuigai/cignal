@@ -11,6 +11,10 @@ interface RSSItem {
   link: string
   companyMentions: string[]
   matchedCompany?: string
+  // Fintech detection fields
+  isFintech?: boolean
+  fintechCategories?: string[]
+  fintechRelevanceScore?: number
 }
 
 interface RSSResponse {
@@ -32,6 +36,10 @@ interface EnhancedPressRelease {
   matchedCompany: string
   source: 'rss' | 'database'
   createdAt: string
+  // Fintech detection fields
+  isFintech?: boolean
+  fintechCategories?: string[]
+  fintechRelevanceScore?: number
 }
 
 interface EnhancedResponse {
@@ -123,7 +131,11 @@ export function useEnhancedPressReleases(companies: Company[]) {
             companyId: item.matchedCompany || 'unknown',
             matchedCompany: item.matchedCompany || 'Unknown',
             source: 'rss' as const,
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            // Preserve fintech detection fields
+            isFintech: item.isFintech,
+            fintechCategories: item.fintechCategories,
+            fintechRelevanceScore: item.fintechRelevanceScore
           }))
           console.log(`📡 Fetched ${rssItems.length} RSS items`)
         } else {

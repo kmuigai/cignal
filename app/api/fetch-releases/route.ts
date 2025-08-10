@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getFeedsForCompanies, getFeedDisplayName } from "@/lib/rss-sources"
+import { detectFintechContent } from "@/lib/fintech-detector"
 
 interface RSSItem {
   title: string
@@ -13,6 +14,10 @@ interface RSSItem {
   feedSource: string
   feedType: "ir-news" | "sec-filings" | "all-news" | "financial"
   sourceName: string
+  // Fintech detection fields
+  isFintech?: boolean
+  fintechCategories?: string[]
+  fintechRelevanceScore?: number
 }
 
 interface FeedResult {
@@ -184,6 +189,9 @@ function parseRSSXML(xmlText: string, feedSource: string, feedType: string, sour
         // Clean HTML from description for better processing
         const cleanDescription = description.replace(/<[^>]*>/g, '').trim()
 
+        // Detect fintech content
+        const fintechDetection = detectFintechContent(title, cleanDescription)
+
         const item: RSSItem = {
           title,
           description: cleanDescription,
@@ -193,7 +201,11 @@ function parseRSSXML(xmlText: string, feedSource: string, feedType: string, sour
           companyMentions,
           feedSource,
           feedType: feedType as "ir-news" | "sec-filings" | "all-news" | "financial",
-          sourceName
+          sourceName,
+          // Add fintech detection results
+          isFintech: fintechDetection.isFintech,
+          fintechCategories: fintechDetection.categories,
+          fintechRelevanceScore: fintechDetection.relevanceScore
         }
 
         items.push(item)

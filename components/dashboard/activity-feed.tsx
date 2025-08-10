@@ -42,7 +42,13 @@ export function ActivityFeed({
   const safeReleases = Array.isArray(releases) ? releases : []
   const safeReadReleases = readReleases instanceof Set ? readReleases : new Set()
 
-  const companyOptions = ["All", ...safeCompanies.map((c) => c.name)]
+  // Add Fintech News as a special filter option
+  const companyOptions = ["All", "Fintech News", ...safeCompanies.map((c) => c.name)]
+  console.log("Company options:", companyOptions) // Debug log
+  console.log("Selected company:", selectedCompany) // Debug current selection
+  console.log("Total releases:", releases.length) // Debug total releases
+  const fintechReleases = releases.filter(r => r.isFintech === true)
+  console.log("Fintech releases found:", fintechReleases.length) // Debug fintech releases
 
   const formatLastUpdated = (timestamp: number | null) => {
     if (!timestamp) return "Never"

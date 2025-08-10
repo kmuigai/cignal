@@ -98,6 +98,10 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
         sourceUrl: item.sourceUrl,
         publishedAt: item.publishedAt,
         companyId: companyId,
+        // Preserve fintech detection fields
+        isFintech: item.isFintech,
+        fintechCategories: item.fintechCategories,
+        fintechRelevanceScore: item.fintechRelevanceScore,
         createdAt: item.createdAt
       }
     }) || []
@@ -112,6 +116,19 @@ export function Dashboard({ user, onSignOut }: DashboardProps) {
   const filteredReleases =
     selectedCompany === "All"
       ? pressReleases
+      : selectedCompany === "Fintech News"
+      ? pressReleases
+          .filter((release) => release.isFintech === true)
+          .sort((a, b) => {
+            // Sort by fintech relevance score (higher scores first)
+            const scoreA = a.fintechRelevanceScore || 0
+            const scoreB = b.fintechRelevanceScore || 0
+            if (scoreA !== scoreB) {
+              return scoreB - scoreA
+            }
+            // If scores are equal, sort by date (newest first)
+            return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+          })
       : pressReleases.filter((release) => {
           const company = Array.isArray(companies) ? companies.find((c) => c.id === release.companyId) : null
           return company?.name === selectedCompany

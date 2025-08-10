@@ -29,6 +29,10 @@ export interface PressRelease {
     end: number
   }>
   createdAt: string
+  // Fintech detection fields
+  isFintech?: boolean
+  fintechCategories?: string[]
+  fintechRelevanceScore?: number
 }
 
 // Stored press release in database
